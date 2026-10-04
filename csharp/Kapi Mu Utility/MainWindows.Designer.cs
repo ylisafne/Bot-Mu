@@ -55,6 +55,7 @@
             label2 = new Label();
             btnWeb = new Button();
             btnCliente = new Button();
+            btnToogle = new Button();
             groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)nudStr).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudEne).BeginInit();
@@ -345,11 +346,23 @@
             btnCliente.UseVisualStyleBackColor = true;
             btnCliente.Click += btnCliente_Click;
             // 
+            // btnToogle
+            // 
+            btnToogle.Font = new Font("Segoe UI", 12.2264156F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btnToogle.Location = new Point(208, 296);
+            btnToogle.Name = "btnToogle";
+            btnToogle.Size = new Size(155, 47);
+            btnToogle.TabIndex = 40;
+            btnToogle.Text = "Iniciar[F8]";
+            btnToogle.UseVisualStyleBackColor = true;
+            btnToogle.Click += btnToogle_Click;
+            // 
             // MainWindows
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(375, 450);
+            ClientSize = new Size(375, 351);
+            Controls.Add(btnToogle);
             Controls.Add(btnCliente);
             Controls.Add(btnWeb);
             Controls.Add(groupBox3);
@@ -408,5 +421,6 @@
         private Label label3;
         private Button btnWeb;
         private Button btnCliente;
+        private Button btnToogle;
     }
 }
