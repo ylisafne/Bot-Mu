@@ -1,0 +1,18 @@
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\bin\Debug\net10.0-windows\Kapi Mu Utility.exe
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\bin\Debug\net10.0-windows\Kapi Mu Utility.deps.json
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\bin\Debug\net10.0-windows\Kapi Mu Utility.runtimeconfig.json
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\bin\Debug\net10.0-windows\Kapi Mu Utility.dll
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\bin\Debug\net10.0-windows\Kapi Mu Utility.pdb
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi_Mu_Utility.MainWindows.resources
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.csproj.GenerateResource.cache
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.AssemblyInfoInputs.cache
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.AssemblyInfo.cs
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.csproj.CoreCompileInputs.cache
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.sourcelink.json
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.dll
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\refint\Kapi Mu Utility.dll
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.pdb
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu Utility.genruntimeconfig.cache
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\ref\Kapi Mu Utility.dll
+C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\obj\Debug\net10.0-windows\Kapi Mu .3A385B0A.Up2Date

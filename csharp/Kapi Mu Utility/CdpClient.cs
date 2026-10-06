@@ -7,18 +7,36 @@ namespace Kapi_Mu_Utility;
 public sealed class CdpClient : IAsyncDisposable
 {
     private readonly ClientWebSocket _socket = new();
+
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+
     private int _messageId;
 
+    private int _disposed;
+
     public bool IsConnected =>
+        Volatile.Read(ref _disposed) == 0 &&
         _socket.State == WebSocketState.Open;
 
     public async Task ConnectAsync(
         string webSocketUrl,
         CancellationToken cancellationToken = default)
     {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(
+                nameof(CdpClient));
+        }
+
         await _socket.ConnectAsync(
             new Uri(webSocketUrl),
             cancellationToken);
+
+        if (_socket.State != WebSocketState.Open)
+        {
+            throw new WebSocketException(
+                $"WebSocket no conectado. Estado: {_socket.State}");
+        }
     }
 
     public async Task<JsonDocument> SendCommandAsync(
@@ -26,61 +44,145 @@ public sealed class CdpClient : IAsyncDisposable
         object? parameters = null,
         CancellationToken cancellationToken = default)
     {
-        if (_socket.State != WebSocketState.Open)
-            throw new InvalidOperationException(
-                "CDP WebSocket no está conectado.");
-
-        int id = Interlocked.Increment(ref _messageId);
-
-        var message = new Dictionary<string, object?>
-        {
-            ["id"] = id,
-            ["method"] = method
-        };
-
-        if (parameters != null)
-            message["params"] = parameters;
-
-        string json = JsonSerializer.Serialize(message);
-
-        byte[] data = Encoding.UTF8.GetBytes(json);
-
-        await _socket.SendAsync(
-            data,
-            WebSocketMessageType.Text,
-            true,
+        await _sendLock.WaitAsync(
             cancellationToken);
 
-        while (true)
+        try
         {
-            string response =
-                await ReceiveMessageAsync(cancellationToken);
-
-            using JsonDocument document =
-                JsonDocument.Parse(response);
-
-            if (!document.RootElement.TryGetProperty(
-                    "id",
-                    out JsonElement responseId))
+            if (Volatile.Read(ref _disposed) != 0)
             {
-                // Evento CDP sin ID.
-                // Lo ignoramos.
-                continue;
+                throw new ObjectDisposedException(
+                    nameof(CdpClient));
             }
 
-            if (responseId.GetInt32() != id)
-                continue;
+            if (_socket.State !=
+                WebSocketState.Open)
+            {
+                throw new WebSocketException(
+                    "El WebSocket CDP no está conectado.");
+            }
 
-            return JsonDocument.Parse(response);
+            int id =
+                Interlocked.Increment(
+                    ref _messageId);
+
+            var message =
+                new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["method"] = method
+                };
+
+            if (parameters != null)
+            {
+                message["params"] = parameters;
+            }
+
+            string json =
+                JsonSerializer.Serialize(
+                    message);
+
+            byte[] data =
+                Encoding.UTF8.GetBytes(json);
+
+            await _socket.SendAsync(
+                data,
+                WebSocketMessageType.Text,
+                true,
+                cancellationToken);
+
+            while (true)
+            {
+                string response =
+                    await ReceiveMessageAsync(
+                        cancellationToken);
+
+                using JsonDocument document =
+                    JsonDocument.Parse(response);
+
+                if (!document.RootElement.TryGetProperty(
+                        "id",
+                        out JsonElement responseId))
+                {
+                    continue;
+                }
+
+                if (responseId.ValueKind !=
+                    JsonValueKind.Number)
+                {
+                    continue;
+                }
+
+                if (responseId.GetInt32() != id)
+                {
+                    continue;
+                }
+
+                return JsonDocument.Parse(
+                    response);
+            }
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
+    public async Task<bool> TestConnectionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsConnected)
+        {
+            return false;
+        }
+
+        try
+        {
+            using JsonDocument response =
+                await SendCommandAsync(
+                    "Browser.getVersion",
+                    null,
+                    cancellationToken);
+
+            return response.RootElement.TryGetProperty(
+                "result",
+                out _);
+        }
+        catch (
+            OperationCanceledException)
+        {
+            throw;
+        }
+        catch (
+            ObjectDisposedException)
+        {
+            return false;
+        }
+        catch (
+            WebSocketException)
+        {
+            return false;
+        }
+        catch
+        {
+            return false;
         }
     }
 
     private async Task<string> ReceiveMessageAsync(
         CancellationToken cancellationToken)
     {
-        byte[] buffer = new byte[8192];
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(
+                nameof(CdpClient));
+        }
 
-        using MemoryStream stream = new();
+        byte[] buffer =
+            new byte[8192];
+
+        using MemoryStream stream =
+            new();
 
         while (true)
         {
@@ -93,7 +195,13 @@ public sealed class CdpClient : IAsyncDisposable
                 WebSocketMessageType.Close)
             {
                 throw new WebSocketException(
-                    "Chrome cerró la conexión CDP.");
+                    "Chrome cerró el WebSocket.");
+            }
+
+            if (result.MessageType !=
+                WebSocketMessageType.Text)
+            {
+                continue;
             }
 
             stream.Write(
@@ -102,7 +210,9 @@ public sealed class CdpClient : IAsyncDisposable
                 result.Count);
 
             if (result.EndOfMessage)
+            {
                 break;
+            }
         }
 
         return Encoding.UTF8.GetString(
@@ -111,20 +221,46 @@ public sealed class CdpClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(
+                ref _disposed,
+                1) != 0)
+        {
+            return;
+        }
+
         try
         {
-            if (_socket.State == WebSocketState.Open)
-            {
-                await _socket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "Cierre normal",
-                    CancellationToken.None);
-            }
+            await _sendLock.WaitAsync();
         }
         catch
         {
+            return;
         }
 
-        _socket.Dispose();
+        try
+        {
+            if (_socket.State ==
+                WebSocketState.Open)
+            {
+                try
+                {
+                    await _socket.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Cierre",
+                        CancellationToken.None);
+                }
+                catch
+                {
+                }
+            }
+        }
+        finally
+        {
+            _socket.Dispose();
+
+            _sendLock.Release();
+
+            _sendLock.Dispose();
+        }
     }
 }

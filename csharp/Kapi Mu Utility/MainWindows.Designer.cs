@@ -56,6 +56,7 @@
             btnWeb = new Button();
             btnCliente = new Button();
             btnToogle = new Button();
+            chkRightClick = new CheckBox();
             groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)nudStr).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudEne).BeginInit();
@@ -287,6 +288,7 @@
             // 
             // groupBox3
             // 
+            groupBox3.Controls.Add(chkRightClick);
             groupBox3.Controls.Add(txtMapa);
             groupBox3.Controls.Add(label3);
             groupBox3.Controls.Add(chkVolver);
@@ -296,7 +298,7 @@
             groupBox3.Controls.Add(label1);
             groupBox3.Location = new Point(12, 199);
             groupBox3.Name = "groupBox3";
-            groupBox3.Size = new Size(190, 144);
+            groupBox3.Size = new Size(190, 218);
             groupBox3.TabIndex = 37;
             groupBox3.TabStop = false;
             groupBox3.Text = "Volver Al Mapa";
@@ -357,11 +359,21 @@
             btnToogle.UseVisualStyleBackColor = true;
             btnToogle.Click += btnToogle_Click;
             // 
+            // chkRightClick
+            // 
+            chkRightClick.AutoSize = true;
+            chkRightClick.Location = new Point(6, 130);
+            chkRightClick.Name = "chkRightClick";
+            chkRightClick.Size = new Size(166, 21);
+            chkRightClick.TabIndex = 37;
+            chkRightClick.Text = "Mantener Click Derecho";
+            chkRightClick.UseVisualStyleBackColor = true;
+            // 
             // MainWindows
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(375, 351);
+            ClientSize = new Size(375, 496);
             Controls.Add(btnToogle);
             Controls.Add(btnCliente);
             Controls.Add(btnWeb);
@@ -422,5 +434,6 @@
         private Button btnWeb;
         private Button btnCliente;
         private Button btnToogle;
+        private CheckBox chkRightClick;
     }
 }
