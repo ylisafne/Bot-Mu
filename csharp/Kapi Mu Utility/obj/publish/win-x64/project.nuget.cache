@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "ArYiw9ILs98=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\ylisa\\OneDrive\\Kapi\\Bot-Mu\\csharp\\Kapi Mu Utility\\Kapi Mu Utility.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\ylisa\\.nuget\\packages\\microsoft.net.illink.tasks\\10.0.12\\microsoft.net.illink.tasks.10.0.12.nupkg.sha512",
+    "C:\\Users\\ylisa\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\10.0.12\\microsoft.netcore.app.runtime.win-x64.10.0.12.nupkg.sha512",
+    "C:\\Users\\ylisa\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\10.0.12\\microsoft.windowsdesktop.app.runtime.win-x64.10.0.12.nupkg.sha512",
+    "C:\\Users\\ylisa\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\10.0.12\\microsoft.aspnetcore.app.runtime.win-x64.10.0.12.nupkg.sha512"
+  ],
+  "logs": []
+}

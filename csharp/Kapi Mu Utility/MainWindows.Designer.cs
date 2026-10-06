@@ -50,13 +50,13 @@
             nudFrom = new NumericUpDown();
             nudTO = new NumericUpDown();
             groupBox3 = new GroupBox();
+            chkRightClick = new CheckBox();
             txtMapa = new TextBox();
             label3 = new Label();
             label2 = new Label();
             btnWeb = new Button();
             btnCliente = new Button();
             btnToogle = new Button();
-            chkRightClick = new CheckBox();
             groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)nudStr).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudEne).BeginInit();
@@ -74,8 +74,6 @@
             // chk_agi
             // 
             chk_agi.AutoSize = true;
-            chk_agi.Checked = true;
-            chk_agi.CheckState = CheckState.Checked;
             chk_agi.Location = new Point(6, 24);
             chk_agi.Name = "chk_agi";
             chk_agi.Size = new Size(75, 21);
@@ -86,8 +84,6 @@
             // chkCmd
             // 
             chkCmd.AutoSize = true;
-            chkCmd.Checked = true;
-            chkCmd.CheckState = CheckState.Checked;
             chkCmd.Location = new Point(6, 55);
             chkCmd.Name = "chkCmd";
             chkCmd.Size = new Size(87, 21);
@@ -98,8 +94,6 @@
             // chkStr
             // 
             chkStr.AutoSize = true;
-            chkStr.Checked = true;
-            chkStr.CheckState = CheckState.Checked;
             chkStr.Location = new Point(6, 86);
             chkStr.Name = "chkStr";
             chkStr.Size = new Size(65, 21);
@@ -110,8 +104,6 @@
             // chkEne
             // 
             chkEne.AutoSize = true;
-            chkEne.Checked = true;
-            chkEne.CheckState = CheckState.Checked;
             chkEne.Location = new Point(6, 117);
             chkEne.Name = "chkEne";
             chkEne.Size = new Size(71, 21);
@@ -122,8 +114,6 @@
             // chkSta
             // 
             chkSta.AutoSize = true;
-            chkSta.Checked = true;
-            chkSta.CheckState = CheckState.Checked;
             chkSta.Location = new Point(6, 148);
             chkSta.Name = "chkSta";
             chkSta.Size = new Size(78, 21);
@@ -303,6 +293,18 @@
             groupBox3.TabStop = false;
             groupBox3.Text = "Volver Al Mapa";
             // 
+            // chkRightClick
+            // 
+            chkRightClick.AutoSize = true;
+            chkRightClick.Checked = true;
+            chkRightClick.CheckState = CheckState.Checked;
+            chkRightClick.Location = new Point(6, 130);
+            chkRightClick.Name = "chkRightClick";
+            chkRightClick.Size = new Size(166, 21);
+            chkRightClick.TabIndex = 37;
+            chkRightClick.Text = "Mantener Click Derecho";
+            chkRightClick.UseVisualStyleBackColor = true;
+            // 
             // txtMapa
             // 
             txtMapa.Location = new Point(6, 99);
@@ -358,16 +360,6 @@
             btnToogle.Text = "Iniciar[F8]";
             btnToogle.UseVisualStyleBackColor = true;
             btnToogle.Click += btnToogle_Click;
-            // 
-            // chkRightClick
-            // 
-            chkRightClick.AutoSize = true;
-            chkRightClick.Location = new Point(6, 130);
-            chkRightClick.Name = "chkRightClick";
-            chkRightClick.Size = new Size(166, 21);
-            chkRightClick.TabIndex = 37;
-            chkRightClick.Text = "Mantener Click Derecho";
-            chkRightClick.UseVisualStyleBackColor = true;
             // 
             // MainWindows
             // 
