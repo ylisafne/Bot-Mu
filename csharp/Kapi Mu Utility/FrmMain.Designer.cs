@@ -34,36 +34,37 @@
             cboPerfil = new ComboBox();
             btnAdd = new Button();
             gvMain = new DataGridView();
+            btnQuitar = new Button();
             ((System.ComponentModel.ISupportInitialize)gvMain).BeginInit();
             SuspendLayout();
             // 
             // btnActive
             // 
-            btnActive.Location = new Point(175, 43);
+            btnActive.Location = new Point(174, 43);
             btnActive.Name = "btnActive";
             btnActive.Size = new Size(75, 40);
             btnActive.TabIndex = 7;
-            btnActive.Text = "Active";
+            btnActive.Text = "Organizar";
             btnActive.UseVisualStyleBackColor = true;
             btnActive.Click += btnActive_Click;
             // 
             // btnHideShow
             // 
-            btnHideShow.Location = new Point(12, 43);
+            btnHideShow.Location = new Point(93, 43);
             btnHideShow.Name = "btnHideShow";
             btnHideShow.Size = new Size(75, 40);
             btnHideShow.TabIndex = 6;
-            btnHideShow.Text = "Hide";
+            btnHideShow.Text = "Ocultar";
             btnHideShow.UseVisualStyleBackColor = true;
             btnHideShow.Click += btnHideShow_Click;
             // 
             // btnLoad
             // 
-            btnLoad.Location = new Point(194, 11);
+            btnLoad.Location = new Point(12, 43);
             btnLoad.Name = "btnLoad";
-            btnLoad.Size = new Size(25, 25);
+            btnLoad.Size = new Size(75, 40);
             btnLoad.TabIndex = 5;
-            btnLoad.Text = "→";
+            btnLoad.Text = "Cargar";
             btnLoad.UseVisualStyleBackColor = true;
             btnLoad.Click += btnLoad_Click;
             // 
@@ -72,12 +73,12 @@
             cboPerfil.FormattingEnabled = true;
             cboPerfil.Location = new Point(12, 12);
             cboPerfil.Name = "cboPerfil";
-            cboPerfil.Size = new Size(176, 25);
+            cboPerfil.Size = new Size(175, 25);
             cboPerfil.TabIndex = 4;
             // 
             // btnAdd
             // 
-            btnAdd.Location = new Point(225, 12);
+            btnAdd.Location = new Point(193, 12);
             btnAdd.Name = "btnAdd";
             btnAdd.Size = new Size(25, 25);
             btnAdd.TabIndex = 8;
@@ -94,11 +95,22 @@
             gvMain.Size = new Size(238, 185);
             gvMain.TabIndex = 9;
             // 
+            // btnQuitar
+            // 
+            btnQuitar.Location = new Point(224, 12);
+            btnQuitar.Name = "btnQuitar";
+            btnQuitar.Size = new Size(25, 25);
+            btnQuitar.TabIndex = 10;
+            btnQuitar.Text = "-";
+            btnQuitar.UseVisualStyleBackColor = true;
+            btnQuitar.Click += btnQuitar_Click;
+            // 
             // FrmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(262, 286);
+            ClientSize = new Size(265, 290);
+            Controls.Add(btnQuitar);
             Controls.Add(gvMain);
             Controls.Add(btnAdd);
             Controls.Add(btnActive);
@@ -122,5 +134,6 @@
         private ComboBox cboPerfil;
         private Button btnAdd;
         private DataGridView gvMain;
+        private Button btnQuitar;
     }
 }

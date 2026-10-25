@@ -135,25 +135,7 @@ namespace Kapi_Mu_Utility
         // ==================== EVENTOS DEL FORMULARIO ====================
         private void FrmMain_Load(object sender, EventArgs e)
         {
-            f8Registrado = RegisterHotKey(
-                            this.Handle,
-                            HOTKEY_ID,
-                            MOD_NONE,
-                            (uint)key
-                        );
 
-            if (!f8Registrado)
-            {
-                int error = Marshal.GetLastWin32Error();
-
-                MessageBox.Show(
-                    $"No se pudo registrar la tecla {key}.\n" +
-                    $"Código de error: {error}",
-                    "Error al registrar tecla",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
-                );
-            }
 
         }
         private void FrmMain_KeyDown(object sender, KeyEventArgs e)
@@ -267,11 +249,76 @@ namespace Kapi_Mu_Utility
                 );
             }
         }
+        private void btnQuitar_Click(object sender, EventArgs e)
+        {
+            // Comprobar que haya un perfil seleccionado
+            if (cboPerfil.SelectedValue == null)
+            {
+                MessageBox.Show("Selecciona un perfil para eliminar.");
+                return;
+            }
+
+            string carpetaPerfil = cboPerfil.SelectedValue.ToString();
+
+            try
+            {
+                List<PerfilConfig> perfiles = LeerPerfiles();
+
+                // Buscar el perfil seleccionado por su carpeta
+                PerfilConfig perfil = perfiles.Find(p =>
+                    string.Equals(
+                        p.Carpeta,
+                        carpetaPerfil,
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (perfil == null)
+                {
+                    MessageBox.Show("No se encontró el perfil seleccionado.");
+                    return;
+                }
+
+                // Pedir confirmación
+                DialogResult resultado = MessageBox.Show(
+                    $"¿Estás seguro de eliminar el perfil '{perfil.Perfil}'?",
+                    "Confirmar eliminación",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning
+                );
+
+                if (resultado != DialogResult.Yes)
+                    return;
+
+                // Eliminar la carpeta del perfil, si existe
+                if (Directory.Exists(perfil.Carpeta))
+                {
+                    Directory.Delete(perfil.Carpeta, true);
+                }
+
+                // Eliminar el perfil de la lista
+                perfiles.Remove(perfil);
+
+                // Guardar los cambios
+                GuardarPerfiles(perfiles);
+
+                // Recargar el ComboBox
+                CargarPerfiles();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Error al eliminar el perfil:\n" + ex.Message,
+                    "Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+        }
         private void btnLoad_Click(object sender, EventArgs e)
         {
             loadWebForm();
         }
-        private void loadWebForm() {
+        private void loadWebForm()
+        {
             if (cboPerfil.SelectedValue == null)
             {
                 MessageBox.Show("No hay perfiles disponibles.");
@@ -392,7 +439,7 @@ namespace Kapi_Mu_Utility
         }
         private void btnActive_Click(object sender, EventArgs e)
         {
-            ToogleBtnActive();
+            OrganizarVentanas();
         }
         // ==================== MÉTODOS AUXILIARES ====================
         private void CargarPerfiles()
@@ -884,5 +931,7 @@ namespace Kapi_Mu_Utility
 
             base.WndProc(ref m);
         }
+
+        
     }
 }

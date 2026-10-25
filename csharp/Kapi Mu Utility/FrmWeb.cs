@@ -17,10 +17,10 @@ namespace Kapi_Mu_Utility
     {
         #region 1. Variables
         // Duración de click Izquierdo
-        private int presionCIMinMs = 70;
-        private int presionCIMaxMs = 150;
-        private int pausaCIMinMs = 250;
-        private int pausaCIMaxMs = 600;
+        private int presionCIMinMs = 25;
+        private int presionCIMaxMs = 60;
+        private int pausaCIMinMs = 35;
+        private int pausaCIMaxMs = 100;
 
         // Duracion de Click Derecho
         private int presionCDMinMs = 2 * 60 * 1000;  // 2 minutos
@@ -84,7 +84,9 @@ namespace Kapi_Mu_Utility
 
                 // Inicializar WebView2
                 await webMain.EnsureCoreWebView2Async(entorno);
-                //webMain.ZoomFactor = 1.2; // 80 %
+                webMain.CoreWebView2.Settings.IsPasswordAutosaveEnabled = true;
+                //webMain.ZoomFactor = 1.5; // 80 %
+
 
                 // F5 para ambos modos: MOB y PC
                 webMain.CoreWebView2.WebMessageReceived += WebMain_WebMessageReceived;
@@ -93,10 +95,6 @@ namespace Kapi_Mu_Utility
                         if (e.key === 'F5') {
                             e.preventDefault();
                             window.chrome.webview.postMessage('F5');
-                        }
-                        if (e.key === 'F6') {
-                            e.preventDefault();
-                            window.chrome.webview.postMessage('F6');
                         }
                         if (e.key === 'F7') {
                             e.preventDefault();
@@ -168,19 +166,19 @@ namespace Kapi_Mu_Utility
         private async Task RegistrarPuntero()
         {
             if (webMain.CoreWebView2 == null) return;
+            string tamañoCursor = vvMobile ? "20px" : "2px";
 
-            await webMain.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
-                (() => {
-                    // Cursor visual para modo móvil
-                    function instalar() {
+            await webMain.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync($@"
+                (() => {{
+                    function instalar() {{
                         if (document.getElementById('kapi-cursor-movil')) return;
 
                         const estilo = document.createElement('style');
                         estilo.textContent = `
-                            #kapi-cursor-movil {
+                            #kapi-cursor-movil {{
                                 position: fixed;
-                                width: 20px;
-                                height: 20px;
+                                width: {tamañoCursor};
+                                height: {tamañoCursor};
                                 box-sizing: border-box;
                                 border: 2px solid white;
                                 border-radius: 50%;
@@ -191,11 +189,12 @@ namespace Kapi_Mu_Utility
                                 transform: translate(-50%,-50%);
                                 display: none;
                                 transition: transform 90ms, background 90ms;
-                            }
-                            #kapi-cursor-movil.activo {
+                            }}
+                            #kapi-cursor-movil.activo {{
                                 background: rgba(40,115,255,.60);
                                 transform: translate(-50%,-50%) scale(.80);
-                            }`;
+                            }}
+                        `;
 
                         document.documentElement.appendChild(estilo);
 
@@ -203,29 +202,29 @@ namespace Kapi_Mu_Utility
                         cursor.id = 'kapi-cursor-movil';
                         document.documentElement.appendChild(cursor);
 
-                        const mover = e => {
+                        const mover = e => {{
                             cursor.style.left = e.clientX + 'px';
                             cursor.style.top = e.clientY + 'px';
                             cursor.style.display = 'block';
-                        };
+                        }};
 
                         document.addEventListener('pointermove', mover, true);
-                        document.addEventListener('pointerdown', e => {
+                        document.addEventListener('pointerdown', e => {{
                             mover(e);
                             cursor.classList.add('activo');
-                        }, true);
+                        }}, true);
                         document.addEventListener('pointerup', () =>
                             cursor.classList.remove('activo'), true);
-                        document.addEventListener('pointerleave', e => {
+                        document.addEventListener('pointerleave', e => {{
                             if (e.target === document.documentElement)
                                 cursor.style.display = 'none';
-                        }, true);
-                    }
+                        }}, true);
+                    }}
 
                     if (document.readyState === 'loading')
-                        document.addEventListener('DOMContentLoaded', instalar, { once: true });
+                        document.addEventListener('DOMContentLoaded', instalar, {{ once: true }});
                     else instalar();
-                })();
+                }})();
             ");
         }
         #endregion
@@ -264,15 +263,11 @@ namespace Kapi_Mu_Utility
                 DetenerClicks();
                 CambiarVista();
             }
-            else if (tecla == "F6")
-            {
-                ObtenerPoint();
-            }
             else if (tecla == "F7")
             {
+                ObtenerPoint();
                 AlternarClicks();
             }
-
         }
         private async void CambiarVista()
         {
@@ -293,7 +288,7 @@ namespace Kapi_Mu_Utility
             if (!puntoGuardado)
             {
                 MessageBox.Show(
-                    "Primero guarda un punto con F6.",
+                    "Primero guarda un punto",
                     "Clic automático",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
@@ -366,7 +361,17 @@ namespace Kapi_Mu_Utility
             ctsClicks?.Cancel();
 
             webMain.Enabled = true;
+            webMain.Focus();
+            Point centro = new Point(
+                webMain.ClientSize.Width / 2,
+                webMain.ClientSize.Height / 2
+            );
+            Point posicionPantalla = webMain.PointToScreen(centro);
+
+            // Mover el mouse físico al centro de WebView2
+            Cursor.Position = posicionPantalla;
             ActualizarTitulo();
+
         }
 
         #endregion
@@ -374,8 +379,26 @@ namespace Kapi_Mu_Utility
         #region 7. Coordenadas y acciones del ratón
         private void ObtenerPoint()
         {
-            // Capturar el punto relativo al control WebView2
-            puntoVentana = webMain.PointToClient(Cursor.Position);
+            // Obtener la posición del mouse relativa a webMain
+            Point punto = webMain.PointToClient(Cursor.Position);
+
+            // Validar que el mouse esté dentro del control
+            if (!webMain.ClientRectangle.Contains(punto))
+            {
+                puntoGuardado = false;
+
+                MessageBox.Show(
+                    "El cursor del mouse debe estar dentro del área del Juego.",
+                    "Cursor fuera de la página",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            // Guardar el punto
+            puntoVentana = punto;
             puntoGuardado = true;
         }
         private async Task ClickCanvasAsync(CancellationToken token)

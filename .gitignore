@@ -3,3 +3,60 @@
 ################################################################################
 
 /csharp/Kapi Mu Utility/.vs
+
+# Carpetas de compilación
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+
+# Carpetas de compilación en cualquier nivel
+**/[Dd]ebug/
+**/[Rr]elease/
+
+# Archivos de Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Archivos compilados
+*.dll
+*.exe
+*.pdb
+*.cache
+*.ilk
+*.obj
+*.pch
+*.log
+
+# Archivos temporales
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Archivos del sistema operativo
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Configuración local y secretos
+.env
+.env.*
+!.env.example
+
+# Publicación
+publish/
+artifacts/
