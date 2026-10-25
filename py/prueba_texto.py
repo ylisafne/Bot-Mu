@@ -1,142 +1,226 @@
-import json
+
 import time
-import requests
-import websocket
+import random
+import threading
+import pyautogui
+import keyboard
 
-CDP_URL = "http://127.0.0.1:9222/json"
+from collections import deque
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.table import Table
 
-pestanas = requests.get(CDP_URL).json()
+# =================================
+# CONFIGURACION
+# =================================
 
-juego = next(
-    (
-        p for p in pestanas
-        if p.get("type") == "page"
-        and "mumagdalenas.com" in p.get("url", "")
-    ),
-    None
-)
+MIN_MINUTOS = 1
+MAX_MINUTOS = 5
 
-if juego is None:
-    print("No se encontró MuMagdalenas.")
-    raise SystemExit
+PAUSA_MIN = 0.5
+PAUSA_MAX = 3.0
 
-print("Pestaña encontrada:")
-print(juego["title"])
-print(juego["url"])
+# =================================
+# ESTADO DEL PROGRAMA
+# =================================
 
-ws = websocket.create_connection(
-    juego["webSocketDebuggerUrl"],
-    origin="http://127.0.0.1:9222"
-)
+activo = False
+ejecutando = True
+bloqueo = threading.Lock()
 
-contador = 0
+console = Console()
+logs = deque(maxlen=5)
+
+estado = "DESACTIVADO"
+tiempo_restante = 0
+ciclo_minutos = 0
+ultimo_evento = "Esperando activacion"
 
 
-def cdp(method, params=None):
+def registrar(mensaje):
+    logs.append(f"[{time.strftime('%H:%M:%S')}] {mensaje}")
 
-    global contador
 
-    contador += 1
+def alternar():
+    global activo, estado
 
-    mensaje = {
-        "id": contador,
-        "method": method
-    }
+    with bloqueo:
+        activo = not activo
+        estado = "ACTIVO" if activo else "DESACTIVADO"
 
-    if params is not None:
-        mensaje["params"] = params
+        if activo:
+            registrar("Autoclicker activado con F8")
+        else:
+            registrar("Desactivado con F8")
 
-    ws.send(json.dumps(mensaje))
+
+def salir():
+    global ejecutando, activo, estado
+
+    with bloqueo:
+        ejecutando = False
+        activo = False
+        estado = "DETENIDO"
+        registrar("Programa finalizado")
+
+    # Liberar el boton derecho al cerrar
+    pyautogui.mouseUp(button="right")
+
+
+def crear_panel():
+    tabla = Table.grid(expand=True)
+    tabla.add_column()
+
+    with bloqueo:
+        estado_actual = estado
+        restante = tiempo_restante
+        duracion = ciclo_minutos
+        evento = ultimo_evento
+        mensajes = list(logs)
+
+    color = "green" if estado_actual == "ACTIVO" else "red"
+
+    tabla.add_row(
+        f"[bold {color}]Estado: {estado_actual}[/bold {color}]"
+    )
+
+    if estado_actual == "ACTIVO":
+        tabla.add_row(
+            f"Duracion del ciclo: {duracion:.2f} minutos"
+        )
+        tabla.add_row(
+            f"Tiempo restante: {max(0, restante):.1f} segundos"
+        )
+
+    tabla.add_row(f"Evento: {evento}")
+    tabla.add_row("")
+    tabla.add_row("[bold]Ultimos 5 mensajes:[/bold]")
+
+    for linea in mensajes:
+        tabla.add_row(linea)
+
+    tabla.add_row("")
+    tabla.add_row("[cyan]F8: activar/desactivar[/cyan]")
+    tabla.add_row("[yellow]F9: cerrar programa[/yellow]")
+
+    return Panel(
+        tabla,
+        title="[bold cyan]AUTOCLICKER[/bold cyan]",
+        border_style="cyan"
+    )
+
+
+def trabajador():
+    global tiempo_restante, ciclo_minutos
+    global ultimo_evento, activo
 
     while True:
+        with bloqueo:
+            if not ejecutando:
+                break
 
-        respuesta = json.loads(ws.recv())
+            encendido = activo
 
-        if respuesta.get("id") == contador:
-            return respuesta
+        if not encendido:
+            time.sleep(0.05)
+            continue
 
+        # Elegir una duracion aleatoria
+        minutos = random.uniform(MIN_MINUTOS, MAX_MINUTOS)
+        duracion = minutos * 60
+        inicio = time.monotonic()
 
-# ============================================================
-# ENFOCAR CANVAS
-# ============================================================
+        with bloqueo:
+            ciclo_minutos = minutos
+            registrar(f"Nuevo ciclo: {minutos:.2f} minutos")
 
-resultado = cdp(
-    "Runtime.evaluate",
-    {
-        "expression": """
-        (() => {
-            const canvas = document.getElementById("canvas");
+        # Mantener presionado el boton derecho
+        pyautogui.mouseDown(button="right")
 
-            if (!canvas) {
-                return "NO_CANVAS";
-            }
+        try:
+            while time.monotonic() - inicio < duracion:
+                with bloqueo:
+                    continuar = ejecutando and activo
 
-            canvas.focus();
+                    if continuar:
+                        tiempo_restante = duracion - (
+                            time.monotonic() - inicio
+                        )
+                        ultimo_evento = "Boton derecho PRESIONADO"
 
-            return {
-                activo: document.activeElement === canvas,
-                tag: document.activeElement.tagName
-            };
-        })()
-        """,
-        "returnByValue": True
-    }
-)
+                if not continuar:
+                    break
 
-print()
-print("FOCO:")
-print(json.dumps(resultado, indent=2))
+                time.sleep(0.05)
 
+        finally:
+            # Soltar siempre el boton derecho
+            pyautogui.mouseUp(button="right")
 
-input(
-    "\nHaz clic en el juego si hace falta y "
-    "presiona ENTER aquí para enviar la letra A..."
-)
+        with bloqueo:
+            continuar = ejecutando and activo
 
+            if not continuar:
+                tiempo_restante = 0
+                ultimo_evento = "Boton derecho liberado"
 
-# ============================================================
-# LETRA A
-# ============================================================
+        if not continuar:
+            continue
 
-print()
-print("Enviando A...")
+        # Pausa aleatoria entre 0.5 y 3 segundos
+        pausa = random.uniform(PAUSA_MIN, PAUSA_MAX)
 
+        with bloqueo:
+            ultimo_evento = f"Pausa de {pausa:.2f} segundos"
+            tiempo_restante = 0
+            registrar(
+                f"Boton liberado; pausa de {pausa:.2f} segundos"
+            )
 
-resultado = cdp(
-    "Input.dispatchKeyEvent",
-    {
-        "type": "rawKeyDown",
-        "windowsVirtualKeyCode": 65,
-        "nativeVirtualKeyCode": 65,
-        "key": "a",
-        "code": "KeyA",
-        "text": "a",
-        "unmodifiedText": "a"
-    }
-)
+        fin_pausa = time.monotonic() + pausa
 
-print("KEYDOWN:")
-print(json.dumps(resultado, indent=2))
+        while time.monotonic() < fin_pausa:
+            with bloqueo:
+                if not ejecutando or not activo:
+                    break
 
-time.sleep(0.2)
-
-
-resultado = cdp(
-    "Input.dispatchKeyEvent",
-    {
-        "type": "keyUp",
-        "windowsVirtualKeyCode": 65,
-        "nativeVirtualKeyCode": 65,
-        "key": "a",
-        "code": "KeyA"
-    }
-)
-
-print("KEYUP:")
-print(json.dumps(resultado, indent=2))
+            time.sleep(0.05)
 
 
-print()
-print("Prueba terminada.")
+def main():
+    keyboard.add_hotkey("f8", alternar)
+    keyboard.add_hotkey("f9", salir)
 
-ws.close()
+    registrar("Programa iniciado")
+    registrar("F8: activar/desactivar | F9: salir")
+
+    hilo = threading.Thread(target=trabajador, daemon=True)
+    hilo.start()
+
+    try:
+        with Live(
+            crear_panel(),
+            console=console,
+            refresh_per_second=5,
+            screen=True
+        ) as live:
+            while True:
+                with bloqueo:
+                    if not ejecutando:
+                        break
+
+                live.update(crear_panel())
+                time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        salir()
+
+    finally:
+        pyautogui.mouseUp(button="right")
+        keyboard.unhook_all()
+        console.print("[yellow]Autoclicker cerrado.[/yellow]")
+
+
+if __name__ == "__main__":
+    main()
