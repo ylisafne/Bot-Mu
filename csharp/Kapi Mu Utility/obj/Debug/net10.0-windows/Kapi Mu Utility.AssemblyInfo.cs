@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Kapi Mu Utility")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8f21ea67b9646d6caab83c2248f822e8319c7432")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+58a8403e2fdc0440f3b430139ea3ea8a87950ff6")]
 [assembly: System.Reflection.AssemblyProductAttribute("Kapi Mu Utility")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Kapi Mu Utility")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
