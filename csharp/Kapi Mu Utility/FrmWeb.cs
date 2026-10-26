@@ -274,8 +274,7 @@ namespace Kapi_Mu_Utility
                 CambiarVista();
             }
             else if (tecla == "F7")
-            {
-                ObtenerPoint();
+            {   
                 AlternarClicks();
             }
         }
@@ -294,7 +293,7 @@ namespace Kapi_Mu_Utility
                 DetenerClicks();
                 return;
             }
-
+            ObtenerPoint();
             if (!puntoGuardado)
             {
                 MessageBox.Show(
@@ -305,6 +304,7 @@ namespace Kapi_Mu_Utility
 
                 return;
             }
+            LimpiarColaAccionesOCR();
 
             clicksActivos = true;
             webMain.Enabled = false;
@@ -321,44 +321,31 @@ namespace Kapi_Mu_Utility
 
             try
             {
-
-
-
                 while (!token.IsCancellationRequested)
                 {
+                    token.ThrowIfCancellationRequested();
+
+                    // 1. La cola tiene prioridad absoluta.
+                    bool procesada = await ProcesarAccionesOCR(token);
+
+                    if (procesada)
+                        continue;
+
                     try
                     {
-                        // Primero atender acciones pendientes del OCR.
-                        bool procesada = await ProcesarAccionesOCR(token);
-
-                        if (procesada)
-                        {
-                            // Esperar 1 segundo antes de continuar con el clic principal.
-                            //await Task.Delay(1000, token);
-                            continue;
-                        }
-
-                        // Ejecutar el clic principal.
+                        // 2. Solo si no hay acciones pendientes,
+                        // ejecutar el clic principal.
                         await ClickCanvasAsync(token);
                     }
                     catch (OperationCanceledException)
                         when (!token.IsCancellationRequested)
                     {
-                        // La pulsación se interrumpió por una acción OCR
-                        // o por pérdida de foco. Revisar la cola.
-                        await ProcesarAccionesOCR(token);
+                        // Una acción OCR interrumpió el clic.
+                        // Volver al inicio para atender la cola.
                         continue;
                     }
 
                     token.ThrowIfCancellationRequested();
-
-                    Random random = new Random();
-
-                    int pausa = vvMobile
-                        ? random.Next(pausaCIMinMs, pausaCIMaxMs + 1)
-                        : random.Next(pausaCDMinMs, pausaCDMaxMs + 1);
-
-                    await Task.Delay(pausa, token);
                 }
             }
             catch (OperationCanceledException)
@@ -710,8 +697,8 @@ namespace Kapi_Mu_Utility
                                 Tipo = ActionType.Trade,
                                 Cursor = puntoCSS,
                                 ClickDerecho = false,
-                                DuracionMs = 200,
-                                PausaMs = 1000
+                                DuracionMs = 20,
+                                PausaMs = 500
                             });
                         }
                         break;
@@ -775,8 +762,30 @@ namespace Kapi_Mu_Utility
         {
             colaAcciones.Enqueue(accion);
 
-            // Interrumpir únicamente la pulsación actual.
+            // Interrumpir la pulsación en curso.
             ctsPulsacion?.Cancel();
+
+            // Despertar al controlador principal.
+            senalAcciones.Release();
+        }
+        private async Task EsperarPausaPrincipalAsync(int pausaMs,
+                                                    CancellationToken token)
+        {
+            Task pausa = Task.Delay(pausaMs, token);
+            Task nuevaAccion = senalAcciones.WaitAsync(token);
+
+            Task terminada = await Task.WhenAny(pausa, nuevaAccion);
+
+            token.ThrowIfCancellationRequested();
+
+            if (terminada == nuevaAccion)
+            {
+                // La señal despierta al ciclo principal.
+                // La acción sigue en la cola.
+                return;
+            }
+
+            await pausa;
         }
         private async Task<bool> ProcesarAccionesOCR(
     CancellationToken token)
@@ -821,6 +830,19 @@ namespace Kapi_Mu_Utility
             }
 
             return procesada;
+        }
+        private void LimpiarColaAccionesOCR()
+        {
+            while (colaAcciones.TryDequeue(out _))
+            {
+                // Descartar todas las acciones pendientes.
+            }
+
+            // Eliminar las señales pendientes acumuladas.
+            while (senalAcciones.Wait(0))
+            {
+                // Consumir señales antiguas.
+            }
         }
 
         #endregion

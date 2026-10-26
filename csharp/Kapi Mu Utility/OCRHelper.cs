@@ -1,12 +1,13 @@
 ﻿
 using System;
-using System.IO;
+using System.Drawing;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
 using System.IO;
-using System.Drawing;
+using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 
 namespace Kapi_Mu_Utility
@@ -73,6 +74,14 @@ namespace Kapi_Mu_Utility
                 anchoRelativo,
                 altoRelativo
             );
+
+            string nombreArchivo = $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
+            string ruta = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Output",
+                nombreArchivo
+            );
+            File.WriteAllBytes(ruta, recorte);
 
             if (recorte == null)
                 return null;
