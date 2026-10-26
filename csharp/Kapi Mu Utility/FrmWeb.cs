@@ -51,7 +51,7 @@ namespace Kapi_Mu_Utility
         }
         private void ActualizarTitulo()
         {
-            this.Text = $"{vvPerfil} {(vvMobile ? "MOB" : "PC")} {(clicksActivos ? "clicking" : "")} {vvRuta}";
+            this.Text = $"{vvPerfil} {(vvMobile ? "MOB" : "PC")} {(clicksActivos ? "clicking" : "")}";
         }
         #endregion
 
@@ -555,13 +555,13 @@ namespace Kapi_Mu_Utility
                             await webMain.CoreWebView2.CallDevToolsProtocolMethodAsync(
                                 "Input.dispatchMouseEvent",
                                 $@"{{
-                            ""type"": ""mouseReleased"",
-                            ""x"": {x},
-                            ""y"": {y},
-                            ""button"": ""{boton}"",
-                            ""buttons"": 0,
-                            ""clickCount"": 1
-                        }}");
+                                    ""type"": ""mouseReleased"",
+                                    ""x"": {x},
+                                    ""y"": {y},
+                                    ""button"": ""{boton}"",
+                                    ""buttons"": 0,
+                                    ""clickCount"": 1
+                                }}");
                         }
                     }
                     finally

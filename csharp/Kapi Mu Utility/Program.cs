@@ -6,32 +6,39 @@ namespace Kapi_Mu_Utility
 {
     internal static class Program
     {
+        // true = múltiples instancias
+        // false = solamente una instancia
+        private static bool FLG = true;
+
         private static Mutex mutex;
         private static EventWaitHandle eventoActivar;
 
         [STAThread]
         static void Main()
         {
-            bool nuevaInstancia;
+            bool nuevaInstancia = true;
 
-            mutex = new Mutex(
-                true,
-                @"Local\Kapi_Mu_Utility_Mutex",
-                out nuevaInstancia
-            );
-
-            eventoActivar = new EventWaitHandle(
-                false,
-                EventResetMode.AutoReset,
-                @"Local\Kapi_Mu_Utility_Activar"
-            );
-
-            if (!nuevaInstancia)
+            if (!FLG)
             {
-                eventoActivar.Set();
-                mutex.Dispose();
-                eventoActivar.Dispose();
-                return;
+                mutex = new Mutex(
+                    true,
+                    @"Local\Kapi_Mu_Utility_Mutex",
+                    out nuevaInstancia
+                );
+
+                if (!nuevaInstancia)
+                {
+                    using (EventWaitHandle evento = new EventWaitHandle(
+                        false,
+                        EventResetMode.AutoReset,
+                        @"Local\Kapi_Mu_Utility_Activar"))
+                    {
+                        evento.Set();
+                    }
+
+                    mutex.Dispose();
+                    return;
+                }
             }
 
             try
@@ -40,48 +47,63 @@ namespace Kapi_Mu_Utility
 
                 FrmMain frm = new FrmMain();
 
-                var hiloActivacion = new Thread(() =>
+                if (!FLG)
                 {
-                    while (true)
+                    EventWaitHandle eventoActivar = new EventWaitHandle(
+                        false,
+                        EventResetMode.AutoReset,
+                        @"Local\Kapi_Mu_Utility_Activar"
+                    );
+
+                    var hiloActivacion = new Thread(() =>
                     {
-                        eventoActivar.WaitOne();
-
-                        if (frm.IsDisposed)
-                            break;
-
-                        frm.BeginInvoke(new Action(() =>
+                        while (true)
                         {
-                            if (frm.WindowState == FormWindowState.Minimized)
-                                frm.WindowState = FormWindowState.Normal;
+                            eventoActivar.WaitOne();
 
-                            frm.Show();
-                            frm.Activate();
-                            frm.BringToFront();
+                            if (frm.IsDisposed)
+                                break;
 
-                            SetForegroundWindow(frm);
-                        }));
-                    }
-                });
+                            if (frm.IsHandleCreated)
+                            {
+                                frm.BeginInvoke(new Action(() =>
+                                {
+                                    if (frm.WindowState ==
+                                        FormWindowState.Minimized)
+                                    {
+                                        frm.WindowState =
+                                            FormWindowState.Normal;
+                                    }
 
-                hiloActivacion.IsBackground = true;
-                hiloActivacion.Start();
+                                    frm.Show();
+                                    frm.Activate();
+                                    frm.BringToFront();
+
+                                    SetForegroundWindow(frm.Handle);
+                                }));
+                            }
+                        }
+
+                        eventoActivar.Dispose();
+                    });
+
+                    hiloActivacion.IsBackground = true;
+                    hiloActivacion.Start();
+                }
 
                 Application.Run(frm);
             }
             finally
             {
-                mutex.ReleaseMutex();
-                mutex.Dispose();
-                eventoActivar.Dispose();
+                if (!FLG && mutex != null)
+                {
+                    mutex.ReleaseMutex();
+                    mutex.Dispose();
+                }
             }
         }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        private static void SetForegroundWindow(Form frm)
-        {
-            SetForegroundWindow(frm.Handle);
-        }
     }
 }
