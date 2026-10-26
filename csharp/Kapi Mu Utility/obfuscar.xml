@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Obfuscator>
+	<Var name="InPath"
+		 value="bin\Release\net10.0-windows\win-x64" />
+	<Var name="OutPath"
+		 value="bin\Obfuscated" />
+	<Var name="LogFile"
+		 value="bin\ofuscacion-log.txt" />
+
+	<Var name="RenameProperties" value="true" />
+	<Var name="RenameEvents" value="true" />
+	<Var name="RenameFields" value="true" />
+	<Var name="KeepPublicApi" value="true" />
+	<Var name="HidePrivateApi" value="true" />
+	<Var name="UseUnicodeNames" value="true" />
+	<Var name="HideStrings" value="true" />
+	<Var name="OptimizeMethods" value="true" />
+	<Var name="SuppressIldasm" value="true" />
+
+	<Module file="$(InPath)\Kapi Mu Utility.dll" />
+</Obfuscator>

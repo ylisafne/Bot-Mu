@@ -782,8 +782,8 @@ namespace Kapi_Mu_Utility
 
             gvMain.Columns.Add(new DataGridViewCheckBoxColumn
             {
-                Name = "Ocultar",
-                HeaderText = "Click",
+                Name = "Organizar",
+                HeaderText = "Organiar",
                 ThreeState = false
             });
 
