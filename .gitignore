@@ -60,3 +60,12 @@ Desktop.ini
 # Publicación
 publish/
 artifacts/
+Salida/
+
+
+**/bin/
+**/obj/
+**/Salida/
+**/publish/
+/csharp/Kapi Mu Utility/obj/Debug/net10.0-windows/Kapi Mu Utility.AssemblyInfoInputs.cache
+/csharp/Kapi Mu Utility/obj/Debug/net10.0-windows/Kapi Mu Utility.AssemblyInfo.cs
