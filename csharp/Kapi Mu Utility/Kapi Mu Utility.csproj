@@ -26,7 +26,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="recursos\TradeReference.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="recursos\Icono.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="recursos\TradeReference.png" />
   </ItemGroup>
 
   <ItemGroup>

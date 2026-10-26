@@ -36,6 +36,9 @@ namespace Kapi_Mu_Utility
         private CancellationTokenSource ctsClicks;
         private bool clicksActivos = false;
         private CancellationTokenSource ctsPulsacion;
+        private readonly OCRHelper ocr = new OCRHelper();
+        private CancellationTokenSource ctsOCR;
+        private readonly SemaphoreSlim semaforoOCR = new SemaphoreSlim(1, 1);
 
         #endregion
 
@@ -84,6 +87,9 @@ namespace Kapi_Mu_Utility
 
                 // Inicializar WebView2
                 await webMain.EnsureCoreWebView2Async(entorno);
+                // Registrar tráfico HTTP/HTTPS en el log
+                //RegistrarTraficoWebView2();
+
                 webMain.CoreWebView2.Settings.IsPasswordAutosaveEnabled = true;
                 //webMain.ZoomFactor = 1.5; // 80 %
 
@@ -298,8 +304,12 @@ namespace Kapi_Mu_Utility
 
             clicksActivos = true;
             webMain.Enabled = false;
-            ctsClicks = new CancellationTokenSource();
+            //Inicia OCR
+            ctsOCR = new CancellationTokenSource();
+            _ = EjecutarOCR(ctsOCR.Token);
 
+            //Inicia Clicks
+            ctsClicks = new CancellationTokenSource();
             CancellationTokenSource ctsActual = ctsClicks;
             CancellationToken token = ctsActual.Token;
 
@@ -355,6 +365,11 @@ namespace Kapi_Mu_Utility
         private void DetenerClicks()
         {
             clicksActivos = false;
+
+            //Detener OCR
+            ctsOCR?.Cancel();
+            ctsOCR?.Dispose();
+            ctsOCR = null;
 
             // Cancelar la pulsación actual y el ciclo completo.
             ctsPulsacion?.Cancel();
@@ -580,6 +595,196 @@ namespace Kapi_Mu_Utility
             await Task.Delay(tiempoPausaMs, token);
         }
         #endregion
+
+        #region Captura Imagen
+        private async Task<byte[]> CapturarImagenAsync()
+        {
+            if (webMain.CoreWebView2 == null)
+                throw new InvalidOperationException(
+                    "WebView2 todavía no está inicializado.");
+
+            using (var stream = new MemoryStream())
+            {
+                await webMain.CoreWebView2.CapturePreviewAsync(
+                    CoreWebView2CapturePreviewImageFormat.Png,
+                    stream);
+
+                return stream.ToArray();
+            }
+        }
+        private async Task EvaluarImagenAsync(CancellationToken token)
+        {
+            // Si otra evaluación está en curso, no iniciar otra.
+            if (!await semaforoOCR.WaitAsync(0))
+                return;
+
+            try
+            {
+                token.ThrowIfCancellationRequested();
+
+                byte[] imagen = await CapturarImagenAsync();
+
+                HelperResponse resultado = await Task.Run(
+                    () => ocr.ValidarImagen(imagen),
+                    token
+                );
+
+                token.ThrowIfCancellationRequested();
+
+                if (resultado == null)
+                    return;
+
+                switch (resultado.IdAction)
+                {
+                    case ActionType.Trade:
+                        if (resultado.Cursor.HasValue)
+                        {
+                            Point cursor = resultado.Cursor.Value;
+
+                            await EjecutarClickAsync(
+                                cursor.X,
+                                cursor.Y,
+                                false, // Clic izquierdo
+                                200,   // Duración de la pulsación
+                                0,     // Pausa adicional
+                                token
+                            );
+                        }
+                        break;
+
+                    case ActionType.Error:
+                        System.Diagnostics.Debug.WriteLine(
+                            $"OCR: {resultado.Message}"
+                        );
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelación normal del OCR.
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Error al evaluar imagen: {ex.Message}"
+                );
+            }
+            finally
+            {
+                semaforoOCR.Release();
+            }
+        }
+        private async Task EjecutarOCR(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                if (clicksActivos)
+                {
+                    try
+                    {
+                        await EvaluarImagenAsync(token);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Error OCR: {ex.Message}");
+                    }
+                }
+
+                await Task.Delay(1000, token);
+            }
+        }
+
+        #endregion
+
+        private async void RegistrarTraficoWebView2()
+        {
+            string logPath = Path.Combine(vvRuta, "WebView.log");
+
+            await webMain.EnsureCoreWebView2Async();
+
+            webMain.CoreWebView2.WebResourceResponseReceived +=
+                async (sender, e) =>
+                {
+                    try
+                    {
+                        var req = e.Request;
+                        var res = e.Response;
+                        var sb = new StringBuilder();
+
+                        sb.AppendLine("========================================");
+                        sb.AppendLine($"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
+                        sb.AppendLine($"Método: {req.Method}");
+                        sb.AppendLine($"URL destino: {req.Uri}");
+
+                        sb.AppendLine("\n--- REQUEST HEADERS ---");
+                        foreach (var h in req.Headers)
+                            sb.AppendLine($"{h.Key}: {h.Value}");
+
+                        sb.AppendLine("\n--- RESPONSE ---");
+                        sb.AppendLine($"Estado HTTP: {res.StatusCode}");
+                        sb.AppendLine($"Descripción: {res.ReasonPhrase}");
+
+                        sb.AppendLine("\n--- RESPONSE HEADERS ---");
+                        foreach (var h in res.Headers)
+                            sb.AppendLine($"{h.Key}: {h.Value}");
+
+                        string contentType = "";
+                        try
+                        {
+                            contentType = res.Headers.GetHeader("Content-Type") ?? "";
+                        }
+                        catch { }
+
+                        if (contentType.Contains("text/") ||
+                    contentType.Contains("json") ||
+                    contentType.Contains("xml") ||
+                    contentType.Contains("javascript"))
+                        {
+                            using Stream stream = await res.GetContentAsync();
+
+                            if (stream != null)
+                            {
+                                using var ms = new MemoryStream();
+                                byte[] buffer = new byte[8192];
+                                int total = 0, read;
+
+                                while (total < 1024 * 1024 &&
+                            (read = await stream.ReadAsync(
+                                buffer, 0,
+                                Math.Min(buffer.Length,
+                                    1024 * 1024 - total))) > 0)
+                                {
+                                    await ms.WriteAsync(buffer, 0, read);
+                                    total += read;
+                                }
+
+                                sb.AppendLine("\n--- RESPONSE BODY ---");
+                                sb.AppendLine(Encoding.UTF8.GetString(ms.ToArray()));
+
+                                if (total >= 1024 * 1024)
+                                    sb.AppendLine("[Truncado: límite 1 MB]");
+                            }
+                        }
+
+                        sb.AppendLine();
+
+                        await File.AppendAllTextAsync(
+                    logPath, sb.ToString(), Encoding.UTF8);
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            await File.AppendAllTextAsync(
+                        logPath,
+                        $"Error registrando tráfico: {ex.Message}\n",
+                        Encoding.UTF8);
+                        }
+                        catch { }
+                    }
+                };
+        }
 
     }
 }
