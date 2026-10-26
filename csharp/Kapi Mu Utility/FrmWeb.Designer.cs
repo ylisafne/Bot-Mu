@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(FrmWeb));
             webMain = new Microsoft.Web.WebView2.WinForms.WebView2();
             ((System.ComponentModel.ISupportInitialize)webMain).BeginInit();
             SuspendLayout();
@@ -50,6 +51,7 @@
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1264, 679);
             Controls.Add(webMain);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "FrmWeb";
             Text = "FrmWeb";
             Load += FrmWeb_Load;

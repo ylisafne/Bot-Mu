@@ -4,6 +4,9 @@
     <_LastSelectedProfileId>C:\Users\ylisa\OneDrive\Kapi\Bot-Mu\csharp\Kapi Mu Utility\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Update="EvalForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="FrmClick.cs">
       <SubType>Form</SubType>
     </Compile>

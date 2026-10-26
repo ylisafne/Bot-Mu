@@ -20,7 +20,7 @@ namespace Kapi_Mu_Utility
     {
         //
         // Define F8 como tecla de activación.
-        private Keys key = Keys.F8;
+        //private Keys key = Keys.F8;
 
         // Define el intervalo entre clics en milisegundos.
         private const int INTERVALO_CLICK_MS = 50;
@@ -57,6 +57,9 @@ namespace Kapi_Mu_Utility
         // Envía eventos de entrada al sistema operativo.
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+        //
+        public static bool PassKey = false;
 
         // Estructura que representa una entrada simulada.
         private struct INPUT
@@ -135,8 +138,18 @@ namespace Kapi_Mu_Utility
         // ==================== EVENTOS DEL FORMULARIO ====================
         private void FrmMain_Load(object sender, EventArgs e)
         {
+            if (!PassKey)
+            {
+                EvalForm evalForm = new EvalForm();
+                evalForm.FormClosed += EvalForm_FormClosed;
+                evalForm.ShowDialog();
+            }
 
-
+        }
+        private void EvalForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (!PassKey)
+                this.Close();
         }
         private void FrmMain_KeyDown(object sender, KeyEventArgs e)
         {
@@ -574,8 +587,7 @@ namespace Kapi_Mu_Utility
                 await Task.Delay(INTERVALO_CLICK_MS, token);
             }
         }
-        private async Task ClickDerechoCentroVentanasAsync(
-    CancellationToken token)
+        private async Task ClickDerechoCentroVentanasAsync(CancellationToken token)
         {
             foreach (DataGridViewRow fila in gvMain.Rows)
             {
@@ -584,8 +596,7 @@ namespace Kapi_Mu_Utility
                 if (fila.IsNewRow)
                     continue;
 
-                bool participa =
-                    fila.Cells["Participa"].Value is bool valor && valor;
+                bool participa = fila.Cells[1].Value is bool valor && valor;
 
                 if (!participa)
                     continue;
@@ -644,8 +655,7 @@ namespace Kapi_Mu_Utility
                 if (fila.IsNewRow)
                     continue;
 
-                bool participa =
-                    fila.Cells["Participa"].Value is bool valor && valor;
+                bool participa = fila.Cells[1].Value is bool valor && valor;
 
                 string carpetaPerfil = fila.Tag as string;
 
@@ -676,23 +686,19 @@ namespace Kapi_Mu_Utility
 
             Rectangle area = Screen.FromControl(this).WorkingArea;
 
+            // Siempre usar como mínimo una cuadrícula de 2x2.
+            // Si hay más de 4 ventanas, ampliar automáticamente.
             int columnas;
             int filas;
 
-            if (cantidad == 1)
+            if (cantidad <= 4)
             {
-                columnas = 1;
-                filas = 1;
-            }
-            else if (cantidad == 2)
-            {
-                columnas = 1;
+                columnas = 2;
                 filas = 2;
             }
             else
             {
-                // Cuadrícula automática, priorizando llenar las filas
-                // de cada columna antes de pasar a la siguiente.
+                // Ampliar la cuadrícula para las ventanas adicionales.
                 columnas = (int)Math.Ceiling(Math.Sqrt(cantidad));
                 filas = (int)Math.Ceiling((double)cantidad / columnas);
             }
@@ -702,7 +708,7 @@ namespace Kapi_Mu_Utility
 
             for (int i = 0; i < cantidad; i++)
             {
-                // Llenar primero de arriba hacia abajo por columna.
+                // Distribuir de arriba hacia abajo por columna.
                 int fila = i % filas;
                 int columna = i / filas;
 
@@ -717,16 +723,18 @@ namespace Kapi_Mu_Utility
                     ? area.Bottom - y
                     : alto;
 
-                ventanasActivas[i].WindowState = FormWindowState.Normal;
+                FrmWeb ventana = ventanasActivas[i];
 
-                ventanasActivas[i].Bounds = new Rectangle(
+                ventana.WindowState = FormWindowState.Normal;
+
+                ventana.Bounds = new Rectangle(
                     x,
                     y,
                     anchoVentana,
                     altoVentana
                 );
 
-                ventanasActivas[i].BringToFront();
+                ventana.BringToFront();
             }
         }
         private void RestaurarVentanas()
@@ -774,7 +782,7 @@ namespace Kapi_Mu_Utility
 
             gvMain.Columns.Add(new DataGridViewCheckBoxColumn
             {
-                Name = "Participa",
+                Name = "Ocultar",
                 HeaderText = "Click",
                 ThreeState = false
             });
@@ -796,7 +804,7 @@ namespace Kapi_Mu_Utility
                 if (fila.IsNewRow)
                     continue;
 
-                if (fila.Cells["Participa"].Value is bool participa
+                if (fila.Cells[1].Value is bool participa
                     && participa)
                 {
                     return true;
@@ -828,7 +836,7 @@ namespace Kapi_Mu_Utility
                 }
             }
 
-            int indice = gvMain.Rows.Add(nombrePerfil, false);
+            int indice = gvMain.Rows.Add(nombrePerfil, true);
 
             // Guardamos la ruta como identificador de la fila.
             gvMain.Rows[indice].Tag = carpetaPerfil;
