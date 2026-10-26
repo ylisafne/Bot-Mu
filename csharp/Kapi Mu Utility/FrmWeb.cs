@@ -1,15 +1,16 @@
 ﻿using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Core;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
-using System.Text;
-using System.Windows.Forms;
 using System.IO;
-using System.Threading.Tasks;
-using Microsoft.Web.WebView2.Core;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using static Kapi_Mu_Utility.HelperResponse;
 
 namespace Kapi_Mu_Utility
 {
@@ -39,6 +40,9 @@ namespace Kapi_Mu_Utility
         private readonly OCRHelper ocr = new OCRHelper();
         private CancellationTokenSource ctsOCR;
         private readonly SemaphoreSlim semaforoOCR = new SemaphoreSlim(1, 1);
+        private readonly System.Collections.Concurrent.ConcurrentQueue<AccionOCR> colaAcciones = new();
+
+        private readonly SemaphoreSlim senalAcciones = new(0);
 
         #endregion
 
@@ -317,17 +321,32 @@ namespace Kapi_Mu_Utility
 
             try
             {
+
+
+
                 while (!token.IsCancellationRequested)
                 {
                     try
                     {
+                        // Primero atender acciones pendientes del OCR.
+                        bool procesada = await ProcesarAccionesOCR(token);
+
+                        if (procesada)
+                        {
+                            // Esperar 1 segundo antes de continuar con el clic principal.
+                            //await Task.Delay(1000, token);
+                            continue;
+                        }
+
+                        // Ejecutar el clic principal.
                         await ClickCanvasAsync(token);
                     }
                     catch (OperationCanceledException)
                         when (!token.IsCancellationRequested)
                     {
-                        // Se canceló solo la pulsación por pérdida de foco.
-                        // Reintentar inmediatamente.
+                        // La pulsación se interrumpió por una acción OCR
+                        // o por pérdida de foco. Revisar la cola.
+                        await ProcesarAccionesOCR(token);
                         continue;
                     }
 
@@ -614,7 +633,6 @@ namespace Kapi_Mu_Utility
         }
         private async Task EvaluarImagenAsync(CancellationToken token)
         {
-            // Si otra evaluación está en curso, no iniciar otra.
             if (!await semaforoOCR.WaitAsync(0))
                 return;
 
@@ -624,13 +642,46 @@ namespace Kapi_Mu_Utility
 
                 byte[] imagen = await CapturarImagenAsync();
 
-                HelperResponse resultado = await Task.Run(
-                    () => ocr.ValidarImagen(imagen),
-                    token
-                );
+                int anchoCaptura;
+                int altoCaptura;
+
+                using (var ms = new MemoryStream(imagen))
+                using (var bitmap = new Bitmap(ms))
+                {
+                    anchoCaptura = bitmap.Width;
+                    altoCaptura = bitmap.Height;
+                }
+
+                // Obtener las dimensiones CSS del viewport.
+                string dimensiones =
+                    await webMain.CoreWebView2.ExecuteScriptAsync(
+                        "JSON.stringify({" +
+                        "width: window.innerWidth," +
+                        "height: window.innerHeight" +
+                        "})");
+
+                // Primero deserializar la cadena devuelta por WebView2.
+                string json =
+                    System.Text.Json.JsonSerializer.Deserialize<string>(
+                        dimensiones);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+                int anchoCSS =
+                    doc.RootElement.GetProperty("width").GetInt32();
+
+                int altoCSS =
+                    doc.RootElement.GetProperty("height").GetInt32();
 
                 token.ThrowIfCancellationRequested();
 
+                HelperResponse resultado = await Task.Run(
+                    () => ocr.ValidarImagen(imagen),
+                    token);
+
+                token.ThrowIfCancellationRequested();
+
+                // Validar antes de acceder a IdAction.
                 if (resultado == null)
                     return;
 
@@ -639,23 +690,35 @@ namespace Kapi_Mu_Utility
                     case ActionType.Trade:
                         if (resultado.Cursor.HasValue)
                         {
-                            Point cursor = resultado.Cursor.Value;
+                            Point puntoCaptura = resultado.Cursor.Value;
 
-                            await EjecutarClickAsync(
-                                cursor.X,
-                                cursor.Y,
-                                false, // Clic izquierdo
-                                200,   // Duración de la pulsación
-                                0,     // Pausa adicional
-                                token
-                            );
+                            Point puntoCSS = ConvertirCapturaACSS(
+                                puntoCaptura,
+                                anchoCaptura,
+                                altoCaptura,
+                                anchoCSS,
+                                altoCSS);
+
+                            System.Diagnostics.Debug.WriteLine(
+                                $"OCR Trade: captura={puntoCaptura}, " +
+                                $"CSS={puntoCSS}, " +
+                                $"captura={anchoCaptura}x{altoCaptura}, " +
+                                $"viewport={anchoCSS}x{altoCSS}");
+
+                            EncolarAccionOCR(new AccionOCR
+                            {
+                                Tipo = ActionType.Trade,
+                                Cursor = puntoCSS,
+                                ClickDerecho = false,
+                                DuracionMs = 200,
+                                PausaMs = 1000
+                            });
                         }
                         break;
 
                     case ActionType.Error:
                         System.Diagnostics.Debug.WriteLine(
-                            $"OCR: {resultado.Message}"
-                        );
+                            $"OCR: {resultado.Message}");
                         break;
                 }
             }
@@ -666,13 +729,27 @@ namespace Kapi_Mu_Utility
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
-                    $"Error al evaluar imagen: {ex.Message}"
-                );
+                    $"Error al evaluar imagen: {ex}");
             }
             finally
             {
                 semaforoOCR.Release();
             }
+        }
+        private Point ConvertirCapturaACSS(
+                                            Point punto,
+                                            int anchoCaptura,
+                                            int altoCaptura,
+                                            int anchoCSS,
+                                            int altoCSS)
+        {
+            int x = (int)Math.Round(
+                (double)punto.X * anchoCSS / anchoCaptura);
+
+            int y = (int)Math.Round(
+                (double)punto.Y * altoCSS / altoCaptura);
+
+            return new Point(x, y);
         }
         private async Task EjecutarOCR(CancellationToken token)
         {
@@ -693,6 +770,57 @@ namespace Kapi_Mu_Utility
 
                 await Task.Delay(1000, token);
             }
+        }
+        private void EncolarAccionOCR(AccionOCR accion)
+        {
+            colaAcciones.Enqueue(accion);
+
+            // Interrumpir únicamente la pulsación actual.
+            ctsPulsacion?.Cancel();
+        }
+        private async Task<bool> ProcesarAccionesOCR(
+    CancellationToken token)
+        {
+            bool procesada = false;
+
+            while (colaAcciones.TryDequeue(out AccionOCR accion))
+            {
+                token.ThrowIfCancellationRequested();
+
+                procesada = true;
+
+                // Esperar 1 segundo antes de ejecutar la acción OCR.
+                await Task.Delay(1000, token);
+
+                token.ThrowIfCancellationRequested();
+
+                switch (accion.Tipo)
+                {
+                    case ActionType.Trade:
+                        if (accion.Cursor.HasValue)
+                        {
+                            Point punto = accion.Cursor.Value;
+
+                            await EjecutarClickAsync(
+                                punto.X,
+                                punto.Y,
+                                accion.ClickDerecho,
+                                accion.DuracionMs,
+                                accion.PausaMs,
+                                token);
+                        }
+                        break;
+
+                    case ActionType.Error:
+                        System.Diagnostics.Debug.WriteLine(
+                            "Acción OCR: Error");
+                        break;
+
+                        // Agrega aquí las demás casuísticas.
+                }
+            }
+
+            return procesada;
         }
 
         #endregion

@@ -27,5 +27,14 @@ namespace Kapi_Mu_Utility
             Message = message;
             Cursor = cursor;
         }
+
+        public class AccionOCR
+        {
+            public ActionType Tipo { get; set; }
+            public Point? Cursor { get; set; }
+            public bool ClickDerecho { get; set; }
+            public int DuracionMs { get; set; } = 200;
+            public int PausaMs { get; set; } = 0;
+        }
     }
 }

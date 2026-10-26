@@ -61,7 +61,7 @@ namespace Kapi_Mu_Utility
             if (imagen == null || imagen.Length == 0)
                 return null;
 
-            double xRelativo = 0.37;
+            double xRelativo = 0.55;
             double yRelativo = 0.35;
             double anchoRelativo = 0.085;
             double altoRelativo = 0.055;
@@ -106,6 +106,20 @@ namespace Kapi_Mu_Utility
         private bool DetectarDesconexion(byte[] imagen)
         {
             // TODO: Analizar la región de desconexión.
+
+
+            /*
+             // Guardar el recorte obtenido.
+            string nombreArchivo = $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
+            string ruta = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Output",
+                nombreArchivo
+            );
+            File.WriteAllBytes(ruta, recorte);
+            //
+             
+             */
             return false;
         }
 
