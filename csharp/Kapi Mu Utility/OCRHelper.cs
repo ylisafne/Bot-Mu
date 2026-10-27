@@ -68,13 +68,15 @@ namespace Kapi_Mu_Utility
             double altoRelativo = 0.055;
 
             byte[] recorte = RecortarImagen(
-                imagen,
-                xRelativo,
-                yRelativo,
-                anchoRelativo,
-                altoRelativo
-            );
+                                            imagen,
+                                            xRelativo,
+                                            yRelativo,
+                                            anchoRelativo,
+                                            altoRelativo);
+            if (recorte == null)
+                return null;
 
+            //
             string nombreArchivo = $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
             string ruta = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
@@ -82,18 +84,16 @@ namespace Kapi_Mu_Utility
                 nombreArchivo
             );
             File.WriteAllBytes(ruta, recorte);
+            //
 
-            if (recorte == null)
-                return null;
 
             bool resCompara = CompararImagenes(
-                recorte,
-                TradeReferencia,
-                0.90);
-
+                                                recorte,
+                                                TradeReferencia,
+                                                0.80);
             if (!resCompara)
                 return null;
-
+            
             // Obtener dimensiones de la imagen original.
             using (var ms = new MemoryStream(imagen))
             using (var original = new Bitmap(ms))
@@ -199,9 +199,10 @@ namespace Kapi_Mu_Utility
             }
         }
 
-        private bool CompararImagenes( byte[] imagenBytes,
-                                        Bitmap referencia,
-                                        double similitudMinima = 0.90)
+        private bool CompararImagenes(
+    byte[] imagenBytes,
+    Bitmap referencia,
+    double similitudMinima = 0.90)
         {
             if (imagenBytes == null ||
                 imagenBytes.Length == 0 ||
@@ -212,7 +213,7 @@ namespace Kapi_Mu_Utility
             {
                 using (var ms = new MemoryStream(imagenBytes))
                 using (var original = new Bitmap(ms))
-                using (var imagenRedimensionada = new Bitmap(
+                using (var normalizada = new Bitmap(
                     referencia.Width,
                     referencia.Height,
                     PixelFormat.Format24bppRgb))
@@ -221,9 +222,10 @@ namespace Kapi_Mu_Utility
                     referencia.Height,
                     PixelFormat.Format24bppRgb))
                 {
-                    // Redimensionar el recorte al tamaño de la referencia.
-                    using (var g = Graphics.FromImage(imagenRedimensionada))
+                    using (var g = Graphics.FromImage(normalizada))
                     {
+                        g.Clear(Color.Black);
+
                         g.InterpolationMode =
                             System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
 
@@ -232,63 +234,60 @@ namespace Kapi_Mu_Utility
                             new Rectangle(
                                 0, 0,
                                 referencia.Width,
-                                referencia.Height),
-                            new Rectangle(
-                                0, 0,
-                                original.Width,
-                                original.Height),
-                            GraphicsUnit.Pixel);
+                                referencia.Height));
                     }
 
-                    // Convertir la referencia al mismo formato de píxeles.
                     using (var g = Graphics.FromImage(plantilla))
-                        g.DrawImageUnscaled(referencia, 0, 0);
+                    {
+                        g.DrawImage(
+                            referencia,
+                            new Rectangle(
+                                0, 0,
+                                referencia.Width,
+                                referencia.Height));
+                    }
 
-                    var rect = new Rectangle(
+                    Rectangle rect = new Rectangle(
                         0, 0,
                         referencia.Width,
                         referencia.Height);
 
-                    var datosA = imagenRedimensionada.LockBits(
+                    BitmapData datosA = normalizada.LockBits(
                         rect,
                         ImageLockMode.ReadOnly,
                         PixelFormat.Format24bppRgb);
 
-                    var datosB = plantilla.LockBits(
+                    BitmapData datosB = plantilla.LockBits(
                         rect,
                         ImageLockMode.ReadOnly,
                         PixelFormat.Format24bppRgb);
 
                     try
                     {
-                        int bytesFila = referencia.Width * 3;
-                        int totalBytes = bytesFila * referencia.Height;
+                        int ancho = referencia.Width;
+                        int alto = referencia.Height;
+                        int bytesFila = ancho * 3;
 
-                        byte[] bufferA = new byte[totalBytes];
-                        byte[] bufferB = new byte[totalBytes];
+                        byte[] bufferA = new byte[bytesFila * alto];
+                        byte[] bufferB = new byte[bytesFila * alto];
 
-                        for (int y = 0; y < referencia.Height; y++)
+                        for (int y = 0; y < alto; y++)
                         {
                             Marshal.Copy(
                                 IntPtr.Add(datosA.Scan0, y * datosA.Stride),
-                                bufferA,
-                                y * bytesFila,
-                                bytesFila);
+                                bufferA, y * bytesFila, bytesFila);
 
                             Marshal.Copy(
                                 IntPtr.Add(datosB.Scan0, y * datosB.Stride),
-                                bufferB,
-                                y * bytesFila,
-                                bytesFila);
+                                bufferB, y * bytesFila, bytesFila);
                         }
 
                         int iguales = 0;
-                        int totalPixeles =
-                            referencia.Width * referencia.Height;
+                        int totalPixeles = ancho * alto;
 
-                        const int tolerancia = 20;
+                        const int tolerancia = 30;
 
-                        for (int i = 0; i < totalBytes; i += 3)
+                        for (int i = 0; i < bufferA.Length; i += 3)
                         {
                             if (Math.Abs(bufferA[i] - bufferB[i]) <= tolerancia &&
                                 Math.Abs(bufferA[i + 1] - bufferB[i + 1]) <= tolerancia &&
@@ -298,13 +297,17 @@ namespace Kapi_Mu_Utility
                             }
                         }
 
-                        double similitud = (double)iguales / totalPixeles;
+                        double similitud =
+                            (double)iguales / totalPixeles;
+
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Similitud Trade: {similitud:P2}");
 
                         return similitud >= similitudMinima;
                     }
                     finally
                     {
-                        imagenRedimensionada.UnlockBits(datosA);
+                        normalizada.UnlockBits(datosA);
                         plantilla.UnlockBits(datosB);
                     }
                 }
@@ -317,7 +320,6 @@ namespace Kapi_Mu_Utility
                 return false;
             }
         }
-
         private static Bitmap CargarRecurso(string nombreArchivo)
         {
             var assembly = Assembly.GetExecutingAssembly();
