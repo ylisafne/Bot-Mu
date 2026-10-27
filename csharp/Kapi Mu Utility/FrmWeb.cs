@@ -1,15 +1,6 @@
 ﻿using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Core;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using static Kapi_Mu_Utility.HelperResponse;
 
 namespace Kapi_Mu_Utility
@@ -44,21 +35,74 @@ namespace Kapi_Mu_Utility
 
         private readonly SemaphoreSlim senalAcciones = new(0);
 
+        // Constantes de Windows API
+        private const int WM_SIZING = 0x0214;
+        private const int WMSZ_LEFT = 1;
+        private const int WMSZ_RIGHT = 2;
+        private const int WMSZ_TOP = 3;
+        private const int WMSZ_BOTTOM = 6;
+
+        // Estructura para capturar los límites del formulario
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        //Estilo de Formulario
+        private bool ventanaConFoco = true;
+        private bool redimensionamientoBloqueado = false;
+        private FormBorderStyle estiloBordeOriginal;
+
+        private const int DWMWA_BORDER_COLOR = 34;
+        private const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(
+            IntPtr hwnd,
+            int atributo,
+            ref int valor,
+            int tamano);
+
         #endregion
 
         #region 2. Constructor y título
         public FrmWeb(string vvRuta, string vvPerfil)
         {
             InitializeComponent();
+            //
+            estiloBordeOriginal = this.FormBorderStyle;
+
+            this.Activated += (s, e) =>
+            {
+                ventanaConFoco = true;
+                ActualizarEstadoVisual();
+            };
+
+            this.Deactivate += (s, e) =>
+            {
+                ventanaConFoco = false;
+                ActualizarEstadoVisual();
+            };
+            //
+
+
             this.MinimizeBox = false;
             this.vvRuta = vvRuta;
             this.vvPerfil = vvPerfil;
-
+            //this.Width = 960;
+            //this.Height = 540;
             ActualizarTitulo();
         }
         private void ActualizarTitulo()
         {
-            this.Text = $"{vvPerfil} {(vvMobile ? "MOB" : "PC")} {(clicksActivos ? "clicking" : "")}";
+            this.Text = $"{vvPerfil} {(vvMobile ? "MOB" : "PC")} " +
+                $"{this.Width} x {this.Height} " +
+                $"{(clicksActivos ? "clicking" : "")}";
+                        
         }
         #endregion
 
@@ -77,7 +121,7 @@ namespace Kapi_Mu_Utility
         #region 4. Inicialización y navegación web
         private async Task CargarWebMainAsync()
         {
-            this.Text = $"{vvPerfil} {(vvMobile ? "MOB" : "PC")} {vvRuta}";
+            ActualizarTitulo();
             try
             {
                 // Crear la carpeta del perfil
@@ -307,6 +351,8 @@ namespace Kapi_Mu_Utility
             LimpiarColaAccionesOCR();
 
             clicksActivos = true;
+            BloquearRedimensionamiento(true);
+            ActualizarEstadoVisual();
             webMain.Enabled = false;
             //Inicia OCR
             ctsOCR = new CancellationTokenSource();
@@ -360,6 +406,8 @@ namespace Kapi_Mu_Utility
 
                     ctsClicks = null;
                     clicksActivos = false;
+                    BloquearRedimensionamiento(false);
+                    ActualizarEstadoVisual();
 
                     ctsActual.Dispose();
 
@@ -600,6 +648,7 @@ namespace Kapi_Mu_Utility
 
             await Task.Delay(tiempoPausaMs, token);
         }
+
         #endregion
 
         #region Captura Imagen
@@ -618,6 +667,7 @@ namespace Kapi_Mu_Utility
                 return stream.ToArray();
             }
         }
+
         private async Task EvaluarImagenAsync(CancellationToken token)
         {
             if (!await semaforoOCR.WaitAsync(0))
@@ -887,9 +937,9 @@ namespace Kapi_Mu_Utility
                         catch { }
 
                         if (contentType.Contains("text/") ||
-                    contentType.Contains("json") ||
-                    contentType.Contains("xml") ||
-                    contentType.Contains("javascript"))
+                        contentType.Contains("json") ||
+                        contentType.Contains("xml") ||
+                        contentType.Contains("javascript"))
                         {
                             using Stream stream = await res.GetContentAsync();
 
@@ -934,6 +984,87 @@ namespace Kapi_Mu_Utility
                         catch { }
                     }
                 };
+        }
+        private void ActualizarEstadoVisual()
+        {
+            if (!IsHandleCreated)
+                return;
+
+            Color color;
+
+            if (clicksActivos)
+            {
+                color = ventanaConFoco
+                    ? Color.FromArgb(120, 255, 140)  // Verde claro
+                    : Color.FromArgb(0, 100, 45);    // Verde oscuro
+            }
+            else
+            {
+                color = ventanaConFoco
+                    ? Color.FromArgb(75, 75, 75)     // Gris oscuro
+                    : Color.FromArgb(128, 128, 128);  // Gris normal
+            }
+
+            int colorBgr =
+                color.R | (color.G << 8) | (color.B << 16);
+
+            DwmSetWindowAttribute(
+                Handle,
+                DWMWA_BORDER_COLOR,
+                ref colorBgr,
+                sizeof(int));
+
+            // El brillo real no está disponible mediante esta API.
+            // Se puede simular con un borde personalizado si se desea.
+        }
+        private void BloquearRedimensionamiento(bool bloquear)
+        {
+            if (redimensionamientoBloqueado == bloquear)
+                return;
+
+            redimensionamientoBloqueado = bloquear;
+
+            FormBorderStyle = bloquear
+                ? FormBorderStyle.FixedSingle
+                : estiloBordeOriginal;
+        }
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_SIZING)
+            {
+                RECT rc = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+
+                int anchoActual = rc.Right - rc.Left;
+                int altoActual = rc.Bottom - rc.Top;
+
+                // Relación de aspecto deseada (16:9 -> 16 / 9 = 1.77777778)
+                double relacionAspecto = 16.0 / 9.0;
+
+                // Determinar qué borde está moviendo el usuario para ajustar el otro lado
+                int ladoModificado = m.WParam.ToInt32();
+
+                if (ladoModificado == WMSZ_LEFT || ladoModificado == WMSZ_RIGHT)
+                {
+                    // Si cambia el ancho, ajustamos el alto
+                    rc.Bottom = rc.Top + (int)(anchoActual / relacionAspecto);
+                }
+                else if (ladoModificado == WMSZ_TOP || ladoModificado == WMSZ_BOTTOM)
+                {
+                    // Si cambia el alto, ajustamos el ancho
+                    rc.Right = rc.Left + (int)(altoActual * relacionAspecto);
+                }
+                else
+                {
+                    // Si arrastra desde una esquina, priorizamos ajustar por el ancho
+                    rc.Bottom = rc.Top + (int)(anchoActual / relacionAspecto);
+                }
+
+                ActualizarTitulo();
+                // Guardar los nuevos valores calculados en la memoria del mensaje
+                Marshal.StructureToPtr(rc, m.LParam, false);
+            }
+
+            base.WndProc(ref m);
         }
 
     }

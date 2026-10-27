@@ -1,18 +1,7 @@
 ﻿using Microsoft.VisualBasic;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.DirectoryServices.ActiveDirectory;
-using System.Drawing;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-
 
 namespace Kapi_Mu_Utility
 {
@@ -481,9 +470,9 @@ namespace Kapi_Mu_Utility
             }
         }
         private static async Task<bool> ClickDerechoEnAsync(
-    int x,
-    int y,
-    CancellationToken token)
+                                                            int x,
+                                                            int y,
+                                                            CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
 
@@ -687,7 +676,6 @@ namespace Kapi_Mu_Utility
             Rectangle area = Screen.FromControl(this).WorkingArea;
 
             // Siempre usar como mínimo una cuadrícula de 2x2.
-            // Si hay más de 4 ventanas, ampliar automáticamente.
             int columnas;
             int filas;
 
@@ -698,7 +686,6 @@ namespace Kapi_Mu_Utility
             }
             else
             {
-                // Ampliar la cuadrícula para las ventanas adicionales.
                 columnas = (int)Math.Ceiling(Math.Sqrt(cantidad));
                 filas = (int)Math.Ceiling((double)cantidad / columnas);
             }
@@ -715,21 +702,47 @@ namespace Kapi_Mu_Utility
                 int x = area.Left + columna * ancho;
                 int y = area.Top + fila * alto;
 
-                int anchoVentana = (columna == columnas - 1)
+                int anchoMaximo = (columna == columnas - 1)
                     ? area.Right - x
                     : ancho;
 
-                int altoVentana = (fila == filas - 1)
+                int altoMaximo = (fila == filas - 1)
                     ? area.Bottom - y
                     : alto;
 
                 FrmWeb ventana = ventanasActivas[i];
 
+                // Restaurar antes de modificar el tamaño.
                 ventana.WindowState = FormWindowState.Normal;
 
+                // Obtener la relación de aspecto actual.
+                int anchoOriginal = ventana.Width;
+                int altoOriginal = ventana.Height;
+
+                if (anchoOriginal <= 0 || altoOriginal <= 0)
+                    continue;
+
+                double relacion =
+                    (double)anchoOriginal / altoOriginal;
+
+                // Ajustar la ventana al tamaño máximo de la celda
+                // sin alterar su relación de aspecto.
+                int anchoVentana = anchoMaximo;
+                int altoVentana = (int)(anchoVentana / relacion);
+
+                if (altoVentana > altoMaximo)
+                {
+                    altoVentana = altoMaximo;
+                    anchoVentana = (int)(altoVentana * relacion);
+                }
+
+                // Centrar la ventana dentro de la celda.
+                int xFinal = x + (anchoMaximo - anchoVentana) / 2;
+                int yFinal = y + (altoMaximo - altoVentana) / 2;
+
                 ventana.Bounds = new Rectangle(
-                    x,
-                    y,
+                    xFinal,
+                    yFinal,
                     anchoVentana,
                     altoVentana
                 );

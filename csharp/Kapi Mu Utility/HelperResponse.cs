@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Kapi_Mu_Utility
+﻿namespace Kapi_Mu_Utility
 {
     public enum ActionType
     {

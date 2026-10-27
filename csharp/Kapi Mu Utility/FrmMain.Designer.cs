@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(FrmMain));
             btnActive = new Button();
             btnHideShow = new Button();
             btnLoad = new Button();
@@ -117,6 +118,7 @@
             Controls.Add(btnHideShow);
             Controls.Add(btnLoad);
             Controls.Add(cboPerfil);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "FrmMain";
             Text = "Loader";
             FormClosed += FrmMain_FormClosed;

@@ -46,4 +46,36 @@
     <PackageReference Include="System.Management" Version="10.0.14" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Properties\" />
+  </ItemGroup>
+  <Target Name="ObfuscateBeforeSingleFileBundle"
+          BeforeTargets="GenerateSingleFileBundle"
+          DependsOnTargets="PrepareForBundle"
+          Condition="'$(PublishSingleFile)' == 'true' and '$(Configuration)' == 'Release'">
+
+      <Exec
+          Command="obfuscar.console &quot;$(ProjectDir)obfuscar.xml&quot;"
+          WorkingDirectory="$(ProjectDir)" />
+
+      <Error
+          Condition="!Exists('$(ProjectDir)bin\obfuscar\$(AssemblyName).dll')"
+          Text="No se encontró el DLL ofuscado en bin\obfuscar." />
+
+      <ItemGroup>
+          <FilesToBundle
+              Remove="@(FilesToBundle)"
+              Condition="'%(Filename)%(Extension)' == '$(AssemblyName).dll'" />
+
+          <FilesToBundle
+              Include="$(ProjectDir)bin\obfuscar\$(AssemblyName).dll">
+              <RelativePath>$(AssemblyName).dll</RelativePath>
+          </FilesToBundle>
+      </ItemGroup>
+
+      <Message
+          Importance="high"
+          Text="Empaquetando DLL ofuscado: $(ProjectDir)bin\obfuscar\$(AssemblyName).dll" />
+
+  </Target>
 </Project>

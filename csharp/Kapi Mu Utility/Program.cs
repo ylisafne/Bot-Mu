@@ -1,7 +1,3 @@
-using System;
-using System.Threading;
-using System.Windows.Forms;
-
 namespace Kapi_Mu_Utility
 {
     internal static class Program

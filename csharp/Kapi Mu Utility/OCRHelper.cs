@@ -1,14 +1,6 @@
-﻿
-using System;
-using System.Drawing;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
-using System.IO;
+﻿using System.Drawing.Imaging;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-
 
 namespace Kapi_Mu_Utility
 {
@@ -16,7 +8,8 @@ namespace Kapi_Mu_Utility
     {
         private readonly int intervaloCompleto = 5;
         private int contadorImagenes = 0;
-
+        private const int ANCHO_REFERENCIA = 1280;
+        private const int ALTO_REFERENCIA = 720;
         private static readonly Bitmap TradeReferencia = CargarRecurso("TradeReference.png");
         public OCRHelper()
         {
@@ -61,10 +54,10 @@ namespace Kapi_Mu_Utility
         {
             if (imagen == null || imagen.Length == 0)
                 return null;
-
+            //Valores Tomados cuando el Formulario es de 1280 x 720
             double xRelativo = 0.55;
             double yRelativo = 0.35;
-            double anchoRelativo = 0.085;
+            double anchoRelativo = 0.081;
             double altoRelativo = 0.055;
 
             byte[] recorte = RecortarImagen(
@@ -75,20 +68,12 @@ namespace Kapi_Mu_Utility
                                             altoRelativo);
             if (recorte == null)
                 return null;
-
             //
-            string nombreArchivo = $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
-            string ruta = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "Output",
-                nombreArchivo
-            );
-            File.WriteAllBytes(ruta, recorte);
+
             //
 
 
-            bool resCompara = CompararImagenes(
-                                                recorte,
+            bool resCompara = CompararImagenes( recorte,
                                                 TradeReferencia,
                                                 0.80);
             if (!resCompara)
@@ -139,11 +124,12 @@ namespace Kapi_Mu_Utility
         }
 
         //
-        private byte[] RecortarImagen(  byte[] imagen,
-                                        double xRelativo,
-                                        double yRelativo,
-                                        double anchoRelativo,
-                                        double altoRelativo)
+        private byte[] RecortarImagen(
+    byte[] imagen,
+    double xRelativo,
+    double yRelativo,
+    double anchoRelativo,
+    double altoRelativo)
         {
             if (imagen == null || imagen.Length == 0)
                 return null;
@@ -156,13 +142,24 @@ namespace Kapi_Mu_Utility
                     int ancho = original.Width;
                     int alto = original.Height;
 
-                    // Convertir proporciones a píxeles
-                    int x = (int)(ancho * xRelativo);
-                    int y = (int)(alto * yRelativo);
-                    int w = (int)(ancho * anchoRelativo);
-                    int h = (int)(alto * altoRelativo);
+                    // Escalar cada eje respecto a la resolución base.
+                    double escalaX = (double)ancho / ANCHO_REFERENCIA;
+                    double escalaY = (double)alto / ALTO_REFERENCIA;
 
-                    // Evitar que el recorte salga de los límites
+                    // Coordenadas definidas para 1280x720.
+                    int x = (int)Math.Round(
+                        ANCHO_REFERENCIA * xRelativo * escalaX);
+
+                    int y = (int)Math.Round(
+                        ALTO_REFERENCIA * yRelativo * escalaY);
+
+                    int w = (int)Math.Round(
+                        ANCHO_REFERENCIA * anchoRelativo * escalaX);
+
+                    int h = (int)Math.Round(
+                        ALTO_REFERENCIA * altoRelativo * escalaY);
+
+                    // Evitar salir de los límites de la imagen.
                     x = Math.Clamp(x, 0, ancho - 1);
                     y = Math.Clamp(y, 0, alto - 1);
                     w = Math.Clamp(w, 1, ancho - x);
@@ -176,14 +173,9 @@ namespace Kapi_Mu_Utility
                             original,
                             new Rectangle(0, 0, w, h),
                             new Rectangle(x, y, w, h),
-                            GraphicsUnit.Pixel
-                        );
+                            GraphicsUnit.Pixel);
 
-                        // Convertir el recorte a byte[]
-                        recorte.Save(
-                            resultado,
-                            System.Drawing.Imaging.ImageFormat.Png
-                        );
+                        recorte.Save(resultado, ImageFormat.Png);
 
                         return resultado.ToArray();
                     }
@@ -192,17 +184,15 @@ namespace Kapi_Mu_Utility
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
-                    $"Error recortando imagen: {ex.Message}"
-                );
+                    $"Error recortando imagen: {ex.Message}");
 
                 return null;
             }
         }
 
-        private bool CompararImagenes(
-    byte[] imagenBytes,
-    Bitmap referencia,
-    double similitudMinima = 0.90)
+        private bool CompararImagenes( byte[] imagenBytes,
+                                        Bitmap referencia,
+                                        double similitudMinima = 0.90)
         {
             if (imagenBytes == null ||
                 imagenBytes.Length == 0 ||
