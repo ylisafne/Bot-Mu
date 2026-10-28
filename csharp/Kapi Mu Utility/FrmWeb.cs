@@ -19,7 +19,8 @@ namespace Kapi_Mu_Utility
         private int presionCDMaxMs = 5 * 60 * 1000;  // 5 minutos
         private int pausaCDMinMs = 2 * 1000;        // 2 segundos
         private int pausaCDMaxMs = 5 * 1000;        // 5 segundos
-
+        //
+        private int enProceso = 0;
         private string vvRuta;
         private string vvPerfil;
         private bool vvMobile = false;
@@ -595,16 +596,29 @@ namespace Kapi_Mu_Utility
 
                 try
                 {
+                    // Mover el puntero dentro del viewport de Chromium.
                     await webMain.CoreWebView2.CallDevToolsProtocolMethodAsync(
                         "Input.dispatchMouseEvent",
                         $@"{{
-                    ""type"": ""mousePressed"",
-                    ""x"": {x},
-                    ""y"": {y},
-                    ""button"": ""{boton}"",
-                    ""buttons"": {botones},
-                    ""clickCount"": 1
-                }}");
+                            ""type"": ""mouseMoved"",
+                            ""x"": {x},
+                            ""y"": {y},
+                            ""button"": ""none"",
+                            ""buttons"": 0
+                        }}");
+
+                    ctsLocal.Token.ThrowIfCancellationRequested();
+
+                    await webMain.CoreWebView2.CallDevToolsProtocolMethodAsync(
+                        "Input.dispatchMouseEvent",
+                        $@"{{
+                            ""type"": ""mousePressed"",
+                            ""x"": {x},
+                            ""y"": {y},
+                            ""button"": ""{boton}"",
+                            ""buttons"": {botones},
+                            ""clickCount"": 1
+                        }}");
 
                     presionado = true;
 
@@ -667,12 +681,28 @@ namespace Kapi_Mu_Utility
                 return stream.ToArray();
             }
         }
-
-        private async Task EvaluarImagenAsync(CancellationToken token)
+        private async Task ControlEvaluarImagen(CancellationToken token)
         {
             if (!await semaforoOCR.WaitAsync(0))
                 return;
 
+            try
+            {
+                bool resultadoDetectado = await EvaluarImagen(token);
+
+                if (resultadoDetectado)
+                {
+                    // Mantener el semáforo ocupado durante 3 segundos.
+                    await Task.Delay(3000, token);
+                }
+            }
+            finally
+            {
+                semaforoOCR.Release();
+            }
+        }
+        private async Task<bool> EvaluarImagen(CancellationToken token)
+        {
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -704,11 +734,9 @@ namespace Kapi_Mu_Utility
 
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
 
-                int anchoCSS =
-                    doc.RootElement.GetProperty("width").GetInt32();
+                int anchoCSS = doc.RootElement.GetProperty("width").GetInt32();
 
-                int altoCSS =
-                    doc.RootElement.GetProperty("height").GetInt32();
+                int altoCSS = doc.RootElement.GetProperty("height").GetInt32();
 
                 token.ThrowIfCancellationRequested();
 
@@ -720,57 +748,42 @@ namespace Kapi_Mu_Utility
 
                 // Validar antes de acceder a IdAction.
                 if (resultado == null)
-                    return;
+                    return false;
 
-                switch (resultado.IdAction)
+                if (resultado.Cursor.HasValue)
                 {
-                    case ActionType.Trade:
-                        if (resultado.Cursor.HasValue)
-                        {
-                            Point puntoCaptura = resultado.Cursor.Value;
+                    Point puntoCSS = ConvertirCapturaACSS(
+                        resultado.Cursor.Value,
+                        anchoCaptura,
+                        altoCaptura,
+                        anchoCSS,
+                        altoCSS);
+                    switch (resultado.IdAction)
+                    {
+                        case ActionType.Trade:
+                            TradeEvent(puntoCSS);
+                            return true;
 
-                            Point puntoCSS = ConvertirCapturaACSS(
-                                puntoCaptura,
-                                anchoCaptura,
-                                altoCaptura,
-                                anchoCSS,
-                                altoCSS);
-
+                        case ActionType.Error:
                             System.Diagnostics.Debug.WriteLine(
-                                $"OCR Trade: captura={puntoCaptura}, " +
-                                $"CSS={puntoCSS}, " +
-                                $"captura={anchoCaptura}x{altoCaptura}, " +
-                                $"viewport={anchoCSS}x{altoCSS}");
+                                $"OCR: {resultado.Message}");
+                            return true;
 
-                            EncolarAccionOCR(new AccionOCR
-                            {
-                                Tipo = ActionType.Trade,
-                                Cursor = puntoCSS,
-                                ClickDerecho = false,
-                                DuracionMs = 20,
-                                PausaMs = 500
-                            });
-                        }
-                        break;
-
-                    case ActionType.Error:
-                        System.Diagnostics.Debug.WriteLine(
-                            $"OCR: {resultado.Message}");
-                        break;
+                        default:
+                            return false;
+                    }
                 }
+                return false;
             }
             catch (OperationCanceledException)
             {
-                // Cancelación normal del OCR.
+                throw;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"Error al evaluar imagen: {ex}");
-            }
-            finally
-            {
-                semaforoOCR.Release();
+                return false;
             }
         }
         private Point ConvertirCapturaACSS(
@@ -796,7 +809,7 @@ namespace Kapi_Mu_Utility
                 {
                     try
                     {
-                        await EvaluarImagenAsync(token);
+                        await ControlEvaluarImagen(token);
                     }
                     catch (Exception ex)
                     {
@@ -810,6 +823,8 @@ namespace Kapi_Mu_Utility
         }
         private void EncolarAccionOCR(AccionOCR accion)
         {
+            if (!colaAcciones.IsEmpty)
+                return;
             colaAcciones.Enqueue(accion);
 
             // Interrumpir la pulsación en curso.
@@ -818,27 +833,8 @@ namespace Kapi_Mu_Utility
             // Despertar al controlador principal.
             senalAcciones.Release();
         }
-        private async Task EsperarPausaPrincipalAsync(int pausaMs,
-                                                    CancellationToken token)
-        {
-            Task pausa = Task.Delay(pausaMs, token);
-            Task nuevaAccion = senalAcciones.WaitAsync(token);
-
-            Task terminada = await Task.WhenAny(pausa, nuevaAccion);
-
-            token.ThrowIfCancellationRequested();
-
-            if (terminada == nuevaAccion)
-            {
-                // La señal despierta al ciclo principal.
-                // La acción sigue en la cola.
-                return;
-            }
-
-            await pausa;
-        }
-        private async Task<bool> ProcesarAccionesOCR(
-    CancellationToken token)
+        
+        private async Task<bool> ProcesarAccionesOCR(CancellationToken token)
         {
             bool procesada = false;
 
@@ -847,38 +843,35 @@ namespace Kapi_Mu_Utility
                 token.ThrowIfCancellationRequested();
 
                 procesada = true;
-
-                // Esperar 1 segundo antes de ejecutar la acción OCR.
-                await Task.Delay(1000, token);
-
-                token.ThrowIfCancellationRequested();
-
-                switch (accion.Tipo)
+                try
                 {
-                    case ActionType.Trade:
-                        if (accion.Cursor.HasValue)
-                        {
-                            Point punto = accion.Cursor.Value;
+                    token.ThrowIfCancellationRequested();
 
-                            await EjecutarClickAsync(
-                                punto.X,
-                                punto.Y,
-                                accion.ClickDerecho,
-                                accion.DuracionMs,
-                                accion.PausaMs,
-                                token);
-                        }
-                        break;
+                    // Esperar antes de ejecutar la acción.
+                    await Task.Delay(1000, token);
 
-                    case ActionType.Error:
-                        System.Diagnostics.Debug.WriteLine(
-                            "Acción OCR: Error");
-                        break;
+                    token.ThrowIfCancellationRequested();
 
-                        // Agrega aquí las demás casuísticas.
+                    if (accion.Cursor.HasValue)
+                    {
+                        Point punto = accion.Cursor.Value;
+
+                        await EjecutarClickAsync(
+                            punto.X,
+                            punto.Y,
+                            accion.ClickDerecho,
+                            accion.DuracionMs,
+                            accion.PausaMs,
+                            token);
+                    }
+                }
+                finally
+                {
+                    // Permitir otro Trade solo cuando termine el actual.
+                    Interlocked.Exchange(ref enProceso, 0);
                 }
             }
-
+            //await EvaluarImagen(token);
             return procesada;
         }
         private void LimpiarColaAccionesOCR()
@@ -895,6 +888,21 @@ namespace Kapi_Mu_Utility
             }
         }
 
+        private void TradeEvent(Point puntoCSS) {
+            // Impedir duplicados mientras el Trade esté pendiente o ejecutándose.
+            if (Interlocked.CompareExchange(ref enProceso, 1, 0) != 0)
+                return;
+
+            EncolarAccionOCR(new AccionOCR
+            {
+                Cursor = puntoCSS,
+                ClickDerecho = false,
+                DuracionMs = 5,
+                PausaMs = 500
+            });
+            //TODO EvaluarImagen si es que aun tiene el boton de trade
+
+        }
         #endregion
 
         private async void RegistrarTraficoWebView2()

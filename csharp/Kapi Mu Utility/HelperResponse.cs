@@ -26,7 +26,6 @@
 
         public class AccionOCR
         {
-            public ActionType Tipo { get; set; }
             public Point? Cursor { get; set; }
             public bool ClickDerecho { get; set; }
             public int DuracionMs { get; set; } = 200;

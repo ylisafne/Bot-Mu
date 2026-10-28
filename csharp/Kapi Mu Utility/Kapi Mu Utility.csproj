@@ -15,6 +15,8 @@
   <SelfContained>true</SelfContained>
   <PublishSingleFile>true</PublishSingleFile>
   <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  <DebugType>none</DebugType>
 </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -38,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="Obfuscar" Version="2.2.50">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -49,33 +51,23 @@
   <ItemGroup>
     <Folder Include="Properties\" />
   </ItemGroup>
-  <Target Name="ObfuscateBeforeSingleFileBundle"
-          BeforeTargets="GenerateSingleFileBundle"
-          DependsOnTargets="PrepareForBundle"
-          Condition="'$(PublishSingleFile)' == 'true' and '$(Configuration)' == 'Release'">
+  
+  <Target Name="ObfuscateBeforeSingleFileBundle" BeforeTargets="GenerateSingleFileBundle" DependsOnTargets="PrepareForBundle" Condition="'$(PublishSingleFile)' == 'true' and '$(Configuration)' == 'Release'">
 
-      <Exec
-          Command="obfuscar.console &quot;$(ProjectDir)obfuscar.xml&quot;"
-          WorkingDirectory="$(ProjectDir)" />
+      <Exec Command="obfuscar.console &quot;$(ProjectDir)obfuscar.xml&quot;" WorkingDirectory="$(ProjectDir)" />
 
-      <Error
-          Condition="!Exists('$(ProjectDir)bin\obfuscar\$(AssemblyName).dll')"
-          Text="No se encontró el DLL ofuscado en bin\obfuscar." />
+      <Error Condition="!Exists('$(ProjectDir)bin\obfuscar\$(AssemblyName).dll')" Text="No se encontró el DLL ofuscado en bin\obfuscar." />
 
       <ItemGroup>
-          <FilesToBundle
-              Remove="@(FilesToBundle)"
-              Condition="'%(Filename)%(Extension)' == '$(AssemblyName).dll'" />
+          <FilesToBundle Remove="@(FilesToBundle)" Condition="'%(Filename)%(Extension)' == '$(AssemblyName).dll'" />
 
-          <FilesToBundle
-              Include="$(ProjectDir)bin\obfuscar\$(AssemblyName).dll">
+          <FilesToBundle Include="$(ProjectDir)bin\obfuscar\$(AssemblyName).dll">
               <RelativePath>$(AssemblyName).dll</RelativePath>
           </FilesToBundle>
       </ItemGroup>
 
-      <Message
-          Importance="high"
-          Text="Empaquetando DLL ofuscado: $(ProjectDir)bin\obfuscar\$(AssemblyName).dll" />
+      <Message Importance="high" Text="Empaquetando DLL ofuscado: $(ProjectDir)bin\obfuscar\$(AssemblyName).dll" />
 
   </Target>
+
 </Project>
