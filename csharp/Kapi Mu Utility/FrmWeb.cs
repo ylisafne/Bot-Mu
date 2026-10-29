@@ -1,4 +1,5 @@
 ﻿using Microsoft.Web.WebView2.Core;
+using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using System.Text;
 using static Kapi_Mu_Utility.HelperResponse;
@@ -9,16 +10,16 @@ namespace Kapi_Mu_Utility
     {
         #region 1. Variables
         // Duración de click Izquierdo
-        private int presionCIMinMs = 25;
-        private int presionCIMaxMs = 60;
-        private int pausaCIMinMs = 35;
-        private int pausaCIMaxMs = 100;
+        private readonly int presionCIMinMs = 25;
+        private readonly int presionCIMaxMs = 60;
+        private readonly int pausaCIMinMs = 35;
+        private readonly int pausaCIMaxMs = 100;
 
         // Duracion de Click Derecho
-        private int presionCDMinMs = 2 * 60 * 1000;  // 2 minutos
-        private int presionCDMaxMs = 5 * 60 * 1000;  // 5 minutos
-        private int pausaCDMinMs = 2 * 1000;        // 2 segundos
-        private int pausaCDMaxMs = 5 * 1000;        // 5 segundos
+        private readonly int presionCDMinMs = 2 * 60 * 1000;  // 2 minutos
+        private readonly int presionCDMaxMs = 5 * 60 * 1000;  // 5 minutos
+        private readonly int pausaCDMinMs = 2 * 1000;        // 2 segundos
+        private readonly int pausaCDMaxMs = 5 * 1000;        // 5 segundos
         //
         private int enProceso = 0;
         private string vvRuta;
@@ -26,11 +27,11 @@ namespace Kapi_Mu_Utility
         private bool vvMobile = false;
         private Point puntoVentana;
         private bool puntoGuardado = false;
-        private CancellationTokenSource ctsClicks;
+        private CancellationTokenSource? ctsClicks;
         private bool clicksActivos = false;
-        private CancellationTokenSource ctsPulsacion;
-        private readonly OCRHelper ocr = new OCRHelper();
-        private CancellationTokenSource ctsOCR;
+        private CancellationTokenSource? ctsPulsacion;
+        private readonly OCRHelper ocr;
+        private CancellationTokenSource? ctsOCR;
         private readonly SemaphoreSlim semaforoOCR = new SemaphoreSlim(1, 1);
         private readonly System.Collections.Concurrent.ConcurrentQueue<AccionOCR> colaAcciones = new();
 
@@ -57,6 +58,7 @@ namespace Kapi_Mu_Utility
         private bool ventanaConFoco = true;
         private bool redimensionamientoBloqueado = false;
         private FormBorderStyle estiloBordeOriginal;
+        private readonly OCRService servicioOCR;
 
         private const int DWMWA_BORDER_COLOR = 34;
         private const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
@@ -71,7 +73,7 @@ namespace Kapi_Mu_Utility
         #endregion
 
         #region 2. Constructor y título
-        public FrmWeb(string vvRuta, string vvPerfil)
+        public FrmWeb(string vvRuta, string vvPerfil, OCRService servicioOCR)
         {
             InitializeComponent();
             //
@@ -90,10 +92,10 @@ namespace Kapi_Mu_Utility
             };
             //
 
-
             this.MinimizeBox = false;
             this.vvRuta = vvRuta;
             this.vvPerfil = vvPerfil;
+            ocr = new OCRHelper(servicioOCR);
             //this.Width = 960;
             //this.Height = 540;
             ActualizarTitulo();
@@ -728,9 +730,8 @@ namespace Kapi_Mu_Utility
                         "})");
 
                 // Primero deserializar la cadena devuelta por WebView2.
-                string json =
-                    System.Text.Json.JsonSerializer.Deserialize<string>(
-                        dimensiones);
+                string json = System.Text.Json.JsonSerializer.Deserialize<string>(
+                            dimensiones);
 
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
 
@@ -764,9 +765,8 @@ namespace Kapi_Mu_Utility
                             TradeEvent(puntoCSS);
                             return true;
 
-                        case ActionType.Error:
-                            System.Diagnostics.Debug.WriteLine(
-                                $"OCR: {resultado.Message}");
+                        case ActionType.Reconexion:
+                            ReconexionEvent(puntoCSS);
                             return true;
 
                         default:
@@ -785,6 +785,39 @@ namespace Kapi_Mu_Utility
                     $"Error al evaluar imagen: {ex}");
                 return false;
             }
+        }
+        private void ReconexionEvent(Point puntoCSS)
+        {
+            // Impedir duplicados mientras el Trade esté pendiente o ejecutándose.
+            if (Interlocked.CompareExchange(ref enProceso, 1, 0) != 0)
+                return;
+
+            EncolarAccionOCR(new AccionOCR
+            {
+                Cursor = puntoCSS,
+                ClickDerecho = false,
+                DuracionMs = 5,
+                PausaMs = 500,
+                EsperarCarga = true
+            });
+            //TODO EvaluarImagen si es que aun tiene el boton de trade
+
+        }
+        private void TradeEvent(Point puntoCSS)
+        {
+            // Impedir duplicados mientras el Trade esté pendiente o ejecutándose.
+            if (Interlocked.CompareExchange(ref enProceso, 1, 0) != 0)
+                return;
+
+            EncolarAccionOCR(new AccionOCR
+            {
+                Cursor = puntoCSS,
+                ClickDerecho = false,
+                DuracionMs = 5,
+                PausaMs = 500
+            });
+            //TODO EvaluarImagen si es que aun tiene el boton de trade
+
         }
         private Point ConvertirCapturaACSS(
                                             Point punto,
@@ -833,7 +866,7 @@ namespace Kapi_Mu_Utility
             // Despertar al controlador principal.
             senalAcciones.Release();
         }
-        
+
         private async Task<bool> ProcesarAccionesOCR(CancellationToken token)
         {
             bool procesada = false;
@@ -843,13 +876,11 @@ namespace Kapi_Mu_Utility
                 token.ThrowIfCancellationRequested();
 
                 procesada = true;
+
                 try
                 {
-                    token.ThrowIfCancellationRequested();
-
-                    // Esperar antes de ejecutar la acción.
+                    // Espera inicial antes de ejecutar la acción OCR.
                     await Task.Delay(1000, token);
-
                     token.ThrowIfCancellationRequested();
 
                     if (accion.Cursor.HasValue)
@@ -864,15 +895,48 @@ namespace Kapi_Mu_Utility
                             accion.PausaMs,
                             token);
                     }
+
+                    // Si es una reconexión, esperar a que el juego
+                    // vuelva a estar cargado antes de continuar.
+                    if (accion.EsperarCarga)
+                    {
+                        await EsperarCargaJuegoAsync(token);
+                    }
                 }
                 finally
                 {
-                    // Permitir otro Trade solo cuando termine el actual.
+                    // Liberar el bloqueo incluso si se cancela la operación.
                     Interlocked.Exchange(ref enProceso, 0);
                 }
             }
-            //await EvaluarImagen(token);
+
             return procesada;
+        }
+        private async Task EsperarCargaJuegoAsync(CancellationToken token)
+        {
+            if (webMain.CoreWebView2 == null)
+                return;
+
+            bool resultado = false;
+
+            while (!resultado)
+            {
+                token.ThrowIfCancellationRequested();
+
+                byte[] imagen = await CapturarImagenAsync();
+
+                resultado = await Task.Run(
+                    () => ocr.ValidarJuego(imagen),
+                    token
+                );
+
+                if (!resultado)
+                {
+                    await Task.Delay(500, token); // Espera 500 ms antes de reintentar
+                }
+            }
+
+            // El juego ya está validado; continuar con el siguiente proceso.
         }
         private void LimpiarColaAccionesOCR()
         {
@@ -888,21 +952,6 @@ namespace Kapi_Mu_Utility
             }
         }
 
-        private void TradeEvent(Point puntoCSS) {
-            // Impedir duplicados mientras el Trade esté pendiente o ejecutándose.
-            if (Interlocked.CompareExchange(ref enProceso, 1, 0) != 0)
-                return;
-
-            EncolarAccionOCR(new AccionOCR
-            {
-                Cursor = puntoCSS,
-                ClickDerecho = false,
-                DuracionMs = 5,
-                PausaMs = 500
-            });
-            //TODO EvaluarImagen si es que aun tiene el boton de trade
-
-        }
         #endregion
 
         private async void RegistrarTraficoWebView2()

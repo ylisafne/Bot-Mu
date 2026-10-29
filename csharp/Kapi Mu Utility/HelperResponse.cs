@@ -3,7 +3,8 @@
     public enum ActionType
     {
         Error = 0,
-        Trade = 1
+        Trade = 1,
+        Reconexion = 2
     }
 
     public class HelperResponse
@@ -30,6 +31,7 @@
             public bool ClickDerecho { get; set; }
             public int DuracionMs { get; set; } = 200;
             public int PausaMs { get; set; } = 0;
+            public bool EsperarCarga { get; set; }
         }
     }
 }

@@ -1,6 +1,9 @@
-﻿using System.Drawing.Imaging;
+﻿using System.Drawing;
+using System.Drawing.Imaging;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Tesseract;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 namespace Kapi_Mu_Utility
 {
@@ -11,75 +14,81 @@ namespace Kapi_Mu_Utility
         private const int ANCHO_REFERENCIA = 1280;
         private const int ALTO_REFERENCIA = 720;
         private static readonly Bitmap TradeReferencia = CargarRecurso("TradeReference.png");
-        public OCRHelper()
+        private readonly OCRService servicioOCR;
+        public OCRHelper(OCRService servicioOCR)
         {
             if (intervaloCompleto < 1)
                 throw new ArgumentOutOfRangeException(
                     nameof(intervaloCompleto));
+            this.servicioOCR = servicioOCR;
         }
 
-        public HelperResponse ValidarImagen(byte[] imagen)
+        public async Task<HelperResponse> ValidarImagen(
+            byte[] imagen,
+            CancellationToken token = default)
         {
             if (imagen == null || imagen.Length == 0)
                 return new HelperResponse(ActionType.Error, "001 Imagen No Valida");
+
+            token.ThrowIfCancellationRequested();
 
             contadorImagenes++;
 
             bool validarTodo = contadorImagenes >= intervaloCompleto;
 
             if (validarTodo)
-                contadorImagenes = 0;
-
-            // Trade se valida en cada imagen.
-            HelperResponse result = DetectarTrade(imagen);
-
-            if (result != null)
-                return result;
-
-            // En la imagen correspondiente, validar todo.
-            if (validarTodo)
             {
-                if (DetectarDesconexion(imagen))
-                    return new HelperResponse(ActionType.Error, "002 Desconexion Detectada");
-
-                if (DetectarError(imagen))
-                    return new HelperResponse(ActionType.Error, "003 Error Detectado");
+                System.Diagnostics.Debug.WriteLine($"ValidarTodo");
+                contadorImagenes = 0;
+                return await DetectarDesconexionError(imagen, token);
             }
+            else {
+                System.Diagnostics.Debug.WriteLine($"TradeEvent");
+                return DetectarTrade(imagen);
+                
+            }
+        }
 
-            // No se detectó ninguna acción o error.
-            return null;
+        public bool ValidarJuego(byte[] imagen) {
+            if (imagen == null || imagen.Length == 0)
+                return false;
+            double xRelativo = 0.81;
+            double yRelativo = 0.02;
+            double anchoRelativo = 0.045;
+            double altoRelativo = 0.07917;
+            byte[] recorte = RecortarImagen(imagen, xRelativo, yRelativo, anchoRelativo, altoRelativo);
+            if (recorte == null)
+                return false;
+
+            //
+            string carpeta = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Output");
+            Directory.CreateDirectory(carpeta);
+            File.WriteAllBytes(Path.Combine(carpeta, $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png"), recorte);
+
+
+            //
+
+            return false;
         }
 
         private HelperResponse DetectarTrade(byte[] imagen)
         {
             if (imagen == null || imagen.Length == 0)
                 return null;
-            //Valores Tomados cuando el Formulario es de 1280 x 720
+
             double xRelativo = 0.55;
             double yRelativo = 0.35;
             double anchoRelativo = 0.081;
             double altoRelativo = 0.055;
 
-            byte[] recorte = RecortarImagen(
-                                            imagen,
-                                            xRelativo,
-                                            yRelativo,
-                                            anchoRelativo,
-                                            altoRelativo);
+            byte[] recorte = RecortarImagen(imagen, xRelativo, yRelativo, anchoRelativo, altoRelativo);
             if (recorte == null)
                 return null;
-            //
 
-            //
-
-
-            bool resCompara = CompararImagenes( recorte,
-                                                TradeReferencia,
-                                                0.80);
+            bool resCompara = CompararImagenes(recorte, TradeReferencia, 0.80);
             if (!resCompara)
                 return null;
-            
-            // Obtener dimensiones de la imagen original.
+
             using (var ms = new MemoryStream(imagen))
             using (var original = new Bitmap(ms))
             {
@@ -89,32 +98,33 @@ namespace Kapi_Mu_Utility
                 int w = (int)(original.Width * anchoRelativo);
                 int h = (int)(original.Height * altoRelativo);
 
-                // Centro del botón en coordenadas de la imagen.
                 int centroX = x + w / 2;
                 int centroY = y + h / 2;
 
-                return new HelperResponse(ActionType.Trade, cursor: new Point(centroX, centroY));
+                return new HelperResponse(ActionType.Trade, "Trade Detectado", cursor: new Point(centroX, centroY));
             }
         }
 
-        private bool DetectarDesconexion(byte[] imagen)
+        private async Task<HelperResponse> DetectarDesconexionError(
+            byte[] imagen,
+            CancellationToken token)
         {
-            // TODO: Analizar la región de desconexión.
+            Point? punto = await BuscarTextoAsync(
+                imagen,
+                token,
+                "Volver a entrar",
+                "Reload");
 
+            // RETORNO DIRECTO: Si no encuentra el texto, retorna null sin validar localmente.
+            if (!punto.HasValue)
+                return null;
 
-            /*
-             // Guardar el recorte obtenido.
-            string nombreArchivo = $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png";
-            string ruta = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "Output",
-                nombreArchivo
-            );
-            File.WriteAllBytes(ruta, recorte);
-            //
-             
-             */
-            return false;
+            System.Diagnostics.Debug.WriteLine($"Desconexión detectada en {punto.Value}");
+
+            return new HelperResponse(
+                ActionType.Reconexion,
+                "Desconexion Detectada",
+                cursor: punto.Value);
         }
 
         private bool DetectarError(byte[] imagen)
@@ -125,11 +135,11 @@ namespace Kapi_Mu_Utility
 
         //
         private byte[] RecortarImagen(
-    byte[] imagen,
-    double xRelativo,
-    double yRelativo,
-    double anchoRelativo,
-    double altoRelativo)
+                                        byte[] imagen,
+                                        double xRelativo,
+                                        double yRelativo,
+                                        double anchoRelativo,
+                                        double altoRelativo)
         {
             if (imagen == null || imagen.Length == 0)
                 return null;
@@ -175,7 +185,7 @@ namespace Kapi_Mu_Utility
                             new Rectangle(x, y, w, h),
                             GraphicsUnit.Pixel);
 
-                        recorte.Save(resultado, ImageFormat.Png);
+                        recorte.Save(resultado, System.Drawing.Imaging.ImageFormat.Png);
 
                         return resultado.ToArray();
                     }
@@ -190,7 +200,7 @@ namespace Kapi_Mu_Utility
             }
         }
 
-        private bool CompararImagenes( byte[] imagenBytes,
+        private bool CompararImagenes(byte[] imagenBytes,
                                         Bitmap referencia,
                                         double similitudMinima = 0.90)
         {
@@ -290,9 +300,6 @@ namespace Kapi_Mu_Utility
                         double similitud =
                             (double)iguales / totalPixeles;
 
-                        System.Diagnostics.Debug.WriteLine(
-                            $"Similitud Trade: {similitud:P2}");
-
                         return similitud >= similitudMinima;
                     }
                     finally
@@ -337,5 +344,85 @@ namespace Kapi_Mu_Utility
                 return new Bitmap(imagen);
             }
         }
+        #region OCR
+        private async Task<Point?> BuscarTextoAsync(
+        byte[] imagen,
+        CancellationToken token,
+        params string[] textosBuscar)
+        {
+            if (imagen == null || imagen.Length == 0 || textosBuscar == null || textosBuscar.Length == 0)
+                return null;
+
+            var textosNormalizados = textosBuscar
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(NormalizarTexto)
+                .ToArray();
+
+            if (textosNormalizados.Length == 0)
+                return null;
+
+            return await servicioOCR.EjecutarAsync(engine =>
+            {
+                using var pixOriginal = Pix.LoadFromMemory(imagen);
+                using var pixGray = pixOriginal.ConvertRGBToGray();
+
+                // SOLUCIÓN AL CAMBIO DE MAPAS: Forzar binarización limpia (Blanco y Negro puro)
+                // Otsu adaptativo calcula el umbral perfecto sin importar si el fondo del mapa es claro u oscuro.
+                using var pix = pixGray.BinarizeOtsuAdaptiveThreshold(200, 200, 10, 10, 0.10f);
+
+                // Usamos SingleBlock o Auto. Si la pantalla tiene mucha interfaz, SingleBlock fuerza a buscar bloques sólidos de texto
+                using var page = engine.Process(pix, PageSegMode.Auto);
+                using var iter = page.GetIterator();
+
+                if (iter == null) return null;
+
+                iter.Begin();
+
+                do
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    // Usamos un bloque try-catch interno o validación de seguridad porque GetText en TextLine 
+                    // a veces falla si el iterador encuentra "basura" visual en los fondos de ciertos mapas.
+                    string linea = null;
+                    try
+                    {
+                        linea = iter.GetText(PageIteratorLevel.TextLine);
+                    }
+                    catch { continue; }
+
+                    if (string.IsNullOrWhiteSpace(linea))
+                        continue;
+
+                    string texto = NormalizarTexto(linea);
+
+                    // Cambiado a coincidencia flexible (por si el OCR lee caracteres extraños pegados al texto)
+                    if (textosNormalizados.Any(t => texto.Contains(t)))
+                    {
+                        if (iter.TryGetBoundingBox(PageIteratorLevel.TextLine, out var rect))
+                        {
+                            return new Point(
+                                (rect.X1 + rect.X2) / 2,
+                                (rect.Y1 + rect.Y2) / 2);
+                        }
+                    }
+                }
+                while (iter.Next(PageIteratorLevel.TextLine));
+
+                return (Point?)null;
+
+            }, token);
+        }
+
+        private static string NormalizarTexto(string texto)
+        {
+            return string.Join(
+                " ",
+                texto.ToLowerInvariant()
+                     .Split(
+                         (char[])null,
+                         StringSplitOptions.RemoveEmptyEntries));
+        }
+        #endregion
     }
 }

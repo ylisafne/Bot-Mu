@@ -115,6 +115,8 @@ namespace Kapi_Mu_Utility
         // Perfiles que ya tienen una ventana abierta.
         private readonly HashSet<string> perfilesBloqueados =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private OCRService servicioOCR;
         //
 
         public FrmMain()
@@ -123,6 +125,7 @@ namespace Kapi_Mu_Utility
             gvMain.CellDoubleClick += gvMain_CellDoubleClick;
             ConfigurarGridPerfiles();
             CargarPerfiles();
+            servicioOCR = new OCRService();
         }
         // ==================== EVENTOS DEL FORMULARIO ====================
         private void FrmMain_Load(object sender, EventArgs e)
@@ -346,7 +349,7 @@ namespace Kapi_Mu_Utility
                 perfilesBloqueados.Remove(carpetaPerfil);
             }
 
-            FrmWeb nuevoFrm = new FrmWeb(carpetaPerfil, nombrePerfil);
+            FrmWeb nuevoFrm = new FrmWeb(carpetaPerfil, nombrePerfil, servicioOCR);
 
             RegistrarPerfilGrid(carpetaPerfil, nombrePerfil);
 
