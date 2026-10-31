@@ -70,6 +70,11 @@ namespace Kapi_Mu_Utility
             ref int valor,
             int tamano);
 
+        private volatile bool esperaReconexion = false;
+        private static readonly object _lockConsoleLog = new();
+        //
+        private bool RegistrarTraficoHttps = false;
+
         #endregion
 
         #region 2. Constructor y título
@@ -95,7 +100,7 @@ namespace Kapi_Mu_Utility
             this.MinimizeBox = false;
             this.vvRuta = vvRuta;
             this.vvPerfil = vvPerfil;
-            ocr = new OCRHelper(servicioOCR);
+            ocr = new OCRHelper(servicioOCR, vvPerfil);
             //this.Width = 960;
             //this.Height = 540;
             ActualizarTitulo();
@@ -136,10 +141,15 @@ namespace Kapi_Mu_Utility
                     userDataFolder: vvRuta
                 );
 
-                // Inicializar WebView2
                 await webMain.EnsureCoreWebView2Async(entorno);
-                // Registrar tráfico HTTP/HTTPS en el log
-                //RegistrarTraficoWebView2();
+
+                // Registrar la consola JavaScript.
+                //RegistrarConsolaWebView2();
+
+                // Registrar tráfico HTTP/HTTPS si lo necesitas.
+                RegistrarTraficoWebView2();
+
+
 
                 webMain.CoreWebView2.Settings.IsPasswordAutosaveEnabled = true;
                 //webMain.ZoomFactor = 1.5; // 80 %
@@ -333,6 +343,33 @@ namespace Kapi_Mu_Utility
         #endregion
 
         #region 6. Clic automático
+        private async Task GuardarSkill(CancellationToken token)
+        {
+            try
+            {
+                token.ThrowIfCancellationRequested();
+
+                DatosCaptura imagen = await CapturarImagenAsync();
+
+                bool skill = false;
+
+                for (int i = 0; i < 5 && !skill; i++)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    skill = await ocr.GuardarSkill(imagen.Imagen, vvRuta);
+
+                    if (!skill && i < 4)
+                        await Task.Delay(500, token);
+                }
+
+                token.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelación normal: no mostrar errores.
+            }
+        }
         private async void AlternarClicks()
         {
             if (clicksActivos)
@@ -352,7 +389,7 @@ namespace Kapi_Mu_Utility
                 return;
             }
             LimpiarColaAccionesOCR();
-
+            
             clicksActivos = true;
             BloquearRedimensionamiento(true);
             ActualizarEstadoVisual();
@@ -360,6 +397,7 @@ namespace Kapi_Mu_Utility
             //Inicia OCR
             ctsOCR = new CancellationTokenSource();
             _ = EjecutarOCR(ctsOCR.Token);
+            _ = GuardarSkill(ctsOCR.Token);
 
             //Inicia Clicks
             ctsClicks = new CancellationTokenSource();
@@ -608,6 +646,11 @@ namespace Kapi_Mu_Utility
                             ""button"": ""none"",
                             ""buttons"": 0
                         }}");
+                    if (tiempoPresionMs <= 0)
+                    {
+                        await Task.Delay(tiempoPausaMs, token);
+                        return;
+                    }
 
                     ctsLocal.Token.ThrowIfCancellationRequested();
 
@@ -668,7 +711,7 @@ namespace Kapi_Mu_Utility
         #endregion
 
         #region Captura Imagen
-        private async Task<byte[]> CapturarImagenAsync()
+        private async Task<DatosCaptura> CapturarImagenAsync()
         {
             if (webMain.CoreWebView2 == null)
                 throw new InvalidOperationException(
@@ -680,7 +723,45 @@ namespace Kapi_Mu_Utility
                     CoreWebView2CapturePreviewImageFormat.Png,
                     stream);
 
-                return stream.ToArray();
+                byte[] imagen = stream.ToArray();
+
+                int anchoCaptura;
+                int altoCaptura;
+
+                using (var ms = new MemoryStream(imagen))
+                using (var bitmap = new Bitmap(ms))
+                {
+                    anchoCaptura = bitmap.Width;
+                    altoCaptura = bitmap.Height;
+                }
+
+                string dimensiones =
+                    await webMain.CoreWebView2.ExecuteScriptAsync(
+                        "JSON.stringify({" +
+                        "width: window.innerWidth," +
+                        "height: window.innerHeight" +
+                        "})");
+
+                string json =
+                    System.Text.Json.JsonSerializer.Deserialize<string>(
+                        dimensiones);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+                int anchoCSS = doc.RootElement
+                    .GetProperty("width").GetInt32();
+
+                int altoCSS = doc.RootElement
+                    .GetProperty("height").GetInt32();
+
+                return new DatosCaptura
+                {
+                    Imagen = imagen,
+                    AnchoCaptura = anchoCaptura,
+                    AltoCaptura = altoCaptura,
+                    AnchoCSS = anchoCSS,
+                    AltoCSS = altoCSS
+                };
             }
         }
         private async Task ControlEvaluarImagen(CancellationToken token)
@@ -709,45 +790,16 @@ namespace Kapi_Mu_Utility
             {
                 token.ThrowIfCancellationRequested();
 
-                byte[] imagen = await CapturarImagenAsync();
-
-                int anchoCaptura;
-                int altoCaptura;
-
-                using (var ms = new MemoryStream(imagen))
-                using (var bitmap = new Bitmap(ms))
-                {
-                    anchoCaptura = bitmap.Width;
-                    altoCaptura = bitmap.Height;
-                }
-
-                // Obtener las dimensiones CSS del viewport.
-                string dimensiones =
-                    await webMain.CoreWebView2.ExecuteScriptAsync(
-                        "JSON.stringify({" +
-                        "width: window.innerWidth," +
-                        "height: window.innerHeight" +
-                        "})");
-
-                // Primero deserializar la cadena devuelta por WebView2.
-                string json = System.Text.Json.JsonSerializer.Deserialize<string>(
-                            dimensiones);
-
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-
-                int anchoCSS = doc.RootElement.GetProperty("width").GetInt32();
-
-                int altoCSS = doc.RootElement.GetProperty("height").GetInt32();
+                DatosCaptura captura = await CapturarImagenAsync();
 
                 token.ThrowIfCancellationRequested();
 
                 HelperResponse resultado = await Task.Run(
-                    () => ocr.ValidarImagen(imagen),
+                    () => ocr.ValidarImagen(captura.Imagen),
                     token);
 
                 token.ThrowIfCancellationRequested();
 
-                // Validar antes de acceder a IdAction.
                 if (resultado == null)
                     return false;
 
@@ -755,10 +807,11 @@ namespace Kapi_Mu_Utility
                 {
                     Point puntoCSS = ConvertirCapturaACSS(
                         resultado.Cursor.Value,
-                        anchoCaptura,
-                        altoCaptura,
-                        anchoCSS,
-                        altoCSS);
+                        captura.AnchoCaptura,
+                        captura.AltoCaptura,
+                        captura.AnchoCSS,
+                        captura.AltoCSS);
+
                     switch (resultado.IdAction)
                     {
                         case ActionType.Trade:
@@ -773,6 +826,7 @@ namespace Kapi_Mu_Utility
                             return false;
                     }
                 }
+
                 return false;
             }
             catch (OperationCanceledException)
@@ -782,7 +836,8 @@ namespace Kapi_Mu_Utility
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
-                    $"Error al evaluar imagen: {ex}");
+                    $"{vvPerfil} Error al evaluar imagen: {ex}");
+
                 return false;
             }
         }
@@ -791,6 +846,8 @@ namespace Kapi_Mu_Utility
             // Impedir duplicados mientras el Trade esté pendiente o ejecutándose.
             if (Interlocked.CompareExchange(ref enProceso, 1, 0) != 0)
                 return;
+
+            esperaReconexion = true;
 
             EncolarAccionOCR(new AccionOCR
             {
@@ -838,7 +895,7 @@ namespace Kapi_Mu_Utility
         {
             while (!token.IsCancellationRequested)
             {
-                if (clicksActivos)
+                if (clicksActivos && !esperaReconexion)
                 {
                     try
                     {
@@ -847,7 +904,7 @@ namespace Kapi_Mu_Utility
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine(
-                            $"Error OCR: {ex.Message}");
+                            $"{vvPerfil} Error OCR: {ex.Message}");
                     }
                 }
 
@@ -901,6 +958,8 @@ namespace Kapi_Mu_Utility
                     if (accion.EsperarCarga)
                     {
                         await EsperarCargaJuegoAsync(token);
+                        await Task.Delay(1000, token);
+                        esperaReconexion = false;
                     }
                 }
                 finally
@@ -914,29 +973,192 @@ namespace Kapi_Mu_Utility
         }
         private async Task EsperarCargaJuegoAsync(CancellationToken token)
         {
-            if (webMain.CoreWebView2 == null)
-                return;
+            System.Diagnostics.Debug.WriteLine($"{vvPerfil} Iniciando Juego Nuevamente");
 
-            bool resultado = false;
-
-            while (!resultado)
+            while (!token.IsCancellationRequested)
             {
-                token.ThrowIfCancellationRequested();
-
-                byte[] imagen = await CapturarImagenAsync();
-
-                resultado = await Task.Run(
-                    () => ocr.ValidarJuego(imagen),
-                    token
-                );
-
-                if (!resultado)
+                try
                 {
-                    await Task.Delay(500, token); // Espera 500 ms antes de reintentar
+                    using var ctsTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+
+                    ctsTimeout.CancelAfter(TimeSpan.FromMinutes(2));
+
+                    await EsperarMensajeConsolaAsync("join map server received", ctsTimeout.Token);
+
+                    // Si llega el mensaje, salimos del ciclo.
+                    System.Diagnostics.Debug.WriteLine($"{vvPerfil} Juego Cargado");
+
+                    break;
+                }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"{vvPerfil} Tiempo agotado. Reiniciando WebMain...");
+
+                    await ReiniciarWebMainAsync();
+
+                    // Esperar un poco antes de volver a escuchar.
+                    await Task.Delay(5000, token);
+
+                    System.Diagnostics.Debug.WriteLine(
+                        $"{vvPerfil} Reanudando espera de carga...");
                 }
             }
 
-            // El juego ya está validado; continuar con el siguiente proceso.
+            token.ThrowIfCancellationRequested();
+
+            System.Diagnostics.Debug.WriteLine($"{vvPerfil} Comparando Skill");
+
+            await SeleccionaSKill(token);
+        }
+        private async Task SeleccionaSKill(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            DatosCaptura imagen = await CapturarImagenAsync();
+
+            token.ThrowIfCancellationRequested();
+
+            Point? punto = await ocr.ComparaSkill(imagen.Imagen, vvRuta);
+
+            if (punto.HasValue)
+            {
+                Point puntoCSS = ConvertirCapturaACSS(
+                        punto.Value,
+                        imagen.AnchoCaptura,
+                        imagen.AltoCaptura,
+                        imagen.AnchoCSS,
+                        imagen.AltoCSS);
+
+
+                System.Diagnostics.Debug.WriteLine($"{vvPerfil} Skill Diferente, Haciendo Click en X:{puntoCSS.X}, Y:{puntoCSS.Y}");
+                await EjecutarClickAsync(
+                            puntoCSS.X,
+                            puntoCSS.Y,
+                            false,
+                            200,
+                            1000,
+                            token);
+                await EjecutarClickAsync(
+                            imagen.AnchoCSS / 2,
+                            imagen.AltoCSS / 2,
+                            false,
+                            0,
+                            500,
+                            token);
+                System.Diagnostics.Debug.WriteLine($"{vvPerfil} Realizando Captura");
+
+                //Ahora Busca el skill dentro de el menu desplegado
+                DatosCaptura imagenSkills = await CapturarImagenAsync();
+                Point? skillLocation = await ocr.BuscaSKill(imagenSkills.Imagen, vvRuta);
+                if (skillLocation.HasValue) {
+                    Point puntoSkillCSS = ConvertirCapturaACSS(
+                        skillLocation.Value,
+                        imagenSkills.AnchoCaptura,
+                        imagenSkills.AltoCaptura,
+                        imagenSkills.AnchoCSS,
+                        imagenSkills.AltoCSS);
+                    await EjecutarClickAsync(
+                            puntoSkillCSS.X,
+                            puntoSkillCSS.Y,
+                            false,
+                            0,
+                            500,
+                            token);
+                    await EjecutarClickAsync(
+                            puntoSkillCSS.X,
+                            puntoSkillCSS.Y,
+                            false,
+                            50,
+                            500,
+                            token);
+                }
+            }
+        }
+        private async Task<string> EsperarMensajeConsolaAsync(  string palabra,
+                                                                CancellationToken token)
+        {
+            string logPath = Path.Combine(vvRuta, "Console.log");
+            Directory.CreateDirectory(vvRuta);
+
+            var tcs = new TaskCompletionSource<string>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            void EscribirLog(string mensaje)
+            {
+                try
+                {
+                    lock (_lockConsoleLog)
+                    {
+                        File.AppendAllText(
+                            logPath,
+                            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {mensaje}{Environment.NewLine}",
+                            Encoding.UTF8);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Error escribiendo Console.log: {ex}");
+                }
+            }
+
+            void Handler(
+                object? sender,
+                CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+            {
+                try
+                {
+                    string json = e.ParameterObjectAsJson;
+
+                    // Registrar el evento completo para depuración.
+                    //EscribirLog($"[EVENTO] {json}");
+
+                    // Buscar también dentro de objetos, números y otros argumentos.
+                    if (json.Contains(
+                        palabra,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        tcs.TrySetResult(json);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    //EscribirLog($"[ERROR] {ex}");
+                }
+            }
+
+            var consola = webMain.CoreWebView2
+                .GetDevToolsProtocolEventReceiver(
+                    "Runtime.consoleAPICalled");
+
+            // Suscribirse antes de habilitar Runtime.
+            consola.DevToolsProtocolEventReceived += Handler;
+
+            try
+            {
+                // Crear el archivo desde el inicio de la búsqueda.
+                //EscribirLog($"[INICIO] Buscando: '{palabra}'");
+
+                await webMain.CoreWebView2.CallDevToolsProtocolMethodAsync(
+                    "Runtime.enable", "{}");
+
+                return await tcs.Task.WaitAsync(token);
+            }
+            finally
+            {
+                consola.DevToolsProtocolEventReceived -= Handler;
+
+                //EscribirLog($"[FIN] Búsqueda terminada: '{palabra}'");
+            }
+        }
+        private void CambiarIcono(Icon icono)
+        {
+            // Cambiar el icono del formulario principal
+            this.Icon = icono;
+
+
+
         }
         private void LimpiarColaAccionesOCR()
         {
@@ -953,10 +1175,105 @@ namespace Kapi_Mu_Utility
         }
 
         #endregion
+        private async Task RegistrarConsolaWebView2()
+        {
+            string logPath = Path.Combine(vvRuta, "Console.log");
 
+            var consola = webMain.CoreWebView2.GetDevToolsProtocolEventReceiver(
+                "Runtime.consoleAPICalled");
+
+            consola.DevToolsProtocolEventReceived += (s, e) =>
+            {
+                File.AppendAllText(
+                    logPath,
+                    $"[{DateTime.Now:HH:mm:ss}] {e.ParameterObjectAsJson}{Environment.NewLine}",
+                    Encoding.UTF8);
+            };
+
+            await webMain.CoreWebView2.CallDevToolsProtocolMethodAsync(
+                "Runtime.enable", "{}");
+        }
+        private async Task<string> CheckTraffic(string endpoint,
+                                               int timeoutMs = 15000)
+        {
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out Uri endpointUri))
+                throw new ArgumentException("Endpoint no válido.");
+
+            var tcs = new TaskCompletionSource<string>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            EventHandler<CoreWebView2WebResourceResponseReceivedEventArgs> handler = null;
+
+            handler = async (sender, e) =>
+            {
+                try
+                {
+                    // Comprobar si corresponde al endpoint solicitado
+                    if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out Uri requestUri))
+                        return;
+
+                    bool coincide = Uri.Compare(
+                        endpointUri,
+                        requestUri,
+                        UriComponents.SchemeAndServer | UriComponents.Path,
+                        UriFormat.SafeUnescaped,
+                        StringComparison.OrdinalIgnoreCase) == 0;
+
+                    if (!coincide)
+                        return;
+
+                    // Leer respuesta
+                    using Stream stream = await e.Response.GetContentAsync();
+
+                    if (stream == null)
+                    {
+                        tcs.TrySetException(
+                            new Exception("La respuesta no contiene contenido."));
+                        return;
+                    }
+
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                    string json = await reader.ReadToEndAsync();
+
+                    tcs.TrySetResult(json);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            };
+
+            // Activar monitoreo
+            webMain.CoreWebView2.WebResourceResponseReceived += handler;
+
+            try
+            {
+                // Esperar la respuesta o el timeout
+                Task timeoutTask = Task.Delay(timeoutMs);
+
+                Task completedTask = await Task.WhenAny(
+                    tcs.Task,
+                    timeoutTask);
+
+                if (completedTask == timeoutTask)
+                    throw new TimeoutException(
+                        $"No se encontró respuesta para: {endpoint}");
+
+                return await tcs.Task;
+            }
+            finally
+            {
+                // Desactivar monitoreo siempre
+                webMain.CoreWebView2.WebResourceResponseReceived -= handler;
+            }
+        }
         private async void RegistrarTraficoWebView2()
         {
             string logPath = Path.Combine(vvRuta, "WebView.log");
+
+            // Semáforo local para sincronizar las escrituras
+            var logSemaphore = new SemaphoreSlim(1, 1);
 
             await webMain.EnsureCoreWebView2Async();
 
@@ -975,6 +1292,7 @@ namespace Kapi_Mu_Utility
                         sb.AppendLine($"URL destino: {req.Uri}");
 
                         sb.AppendLine("\n--- REQUEST HEADERS ---");
+
                         foreach (var h in req.Headers)
                             sb.AppendLine($"{h.Key}: {h.Value}");
 
@@ -983,10 +1301,12 @@ namespace Kapi_Mu_Utility
                         sb.AppendLine($"Descripción: {res.ReasonPhrase}");
 
                         sb.AppendLine("\n--- RESPONSE HEADERS ---");
+
                         foreach (var h in res.Headers)
                             sb.AppendLine($"{h.Key}: {h.Value}");
 
                         string contentType = "";
+
                         try
                         {
                             contentType = res.Headers.GetHeader("Content-Type") ?? "";
@@ -994,23 +1314,25 @@ namespace Kapi_Mu_Utility
                         catch { }
 
                         if (contentType.Contains("text/") ||
-                        contentType.Contains("json") ||
-                        contentType.Contains("xml") ||
-                        contentType.Contains("javascript"))
+                            contentType.Contains("json") ||
+                            contentType.Contains("xml") ||
+                            contentType.Contains("javascript"))
                         {
                             using Stream stream = await res.GetContentAsync();
 
                             if (stream != null)
                             {
                                 using var ms = new MemoryStream();
+
                                 byte[] buffer = new byte[8192];
-                                int total = 0, read;
+                                int total = 0;
+                                int read;
 
                                 while (total < 1024 * 1024 &&
-                            (read = await stream.ReadAsync(
-                                buffer, 0,
-                                Math.Min(buffer.Length,
-                                    1024 * 1024 - total))) > 0)
+                                    (read = await stream.ReadAsync(
+                                        buffer,
+                                        0,
+                                        Math.Min(buffer.Length, 1024 * 1024 - total))) > 0)
                                 {
                                     await ms.WriteAsync(buffer, 0, read);
                                     total += read;
@@ -1026,17 +1348,38 @@ namespace Kapi_Mu_Utility
 
                         sb.AppendLine();
 
-                        await File.AppendAllTextAsync(
-                    logPath, sb.ToString(), Encoding.UTF8);
+                        // Escritura sincronizada
+                        await logSemaphore.WaitAsync();
+
+                        try
+                        {
+                            await File.AppendAllTextAsync(
+                                logPath,
+                                sb.ToString(),
+                                Encoding.UTF8);
+                        }
+                        finally
+                        {
+                            logSemaphore.Release();
+                        }
                     }
                     catch (Exception ex)
                     {
                         try
                         {
-                            await File.AppendAllTextAsync(
-                        logPath,
-                        $"Error registrando tráfico: {ex.Message}\n",
-                        Encoding.UTF8);
+                            await logSemaphore.WaitAsync();
+
+                            try
+                            {
+                                await File.AppendAllTextAsync(
+                                    logPath,
+                                    $"Error registrando tráfico: {ex.Message}\n",
+                                    Encoding.UTF8);
+                            }
+                            finally
+                            {
+                                logSemaphore.Release();
+                            }
                         }
                         catch { }
                     }

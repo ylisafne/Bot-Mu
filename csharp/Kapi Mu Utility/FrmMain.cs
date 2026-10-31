@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualBasic;
 using System.Data;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -8,88 +9,23 @@ namespace Kapi_Mu_Utility
     public partial class FrmMain : Form
     {
         //
-        // Define F8 como tecla de activación.
-        //private Keys key = Keys.F8;
-
-        // Define el intervalo entre clics en milisegundos.
-        private const int INTERVALO_CLICK_MS = 50;
-
-        //Tiempo de Presion del Click Derecho
-        private const int INTERVALO_PRESS_MS = 5;
-
-        // Declara la función para registrar una tecla global.
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-        // Declara la función para desregistrar una tecla global.
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        // Controla la cancelación de los clics automáticos.
-        private CancellationTokenSource clickCts;
-
-        // Almacena la tarea que ejecuta los clics automáticos.
-        private Task tareaClick;
-
-        // Identificador único del atajo de teclado.
-        private const int HOTKEY_ID = 9000;
-
-        // Indica que la tecla no necesita modificadores.
-        private const uint MOD_NONE = 0;
-
-        // Identifica el mensaje de tecla global presionada.
-        private const int WM_HOTKEY = 0x0312;
-
-        // Indica si F8 fue registrado correctamente.
-        private bool f8Registrado;
-
-        // Envía eventos de entrada al sistema operativo.
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-
-        //
         public static bool PassKey = false;
-
-        // Estructura que representa una entrada simulada.
-        private struct INPUT
-        {
-            public uint type;
-            public MOUSEINPUT mi;
-        }
-
-        // Contiene los datos del evento del mouse.
-        private struct MOUSEINPUT
-        {
-            public int dx;
-            public int dy;
-            public uint mouseData;
-            public uint dwFlags;
-            public uint time;
-            public IntPtr dwExtraInfo;
-        }
-
-        // Identifica una entrada simulada del mouse.
-        private const uint INPUT_MOUSE = 0;
-
-        // Simula la presión del botón derecho.
-        private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
-
-        // Simula la liberación del botón derecho.
-        private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
 
         // Almacena los formularios web abiertos por perfil.
         private readonly Dictionary<string, FrmWeb> frmWebAbiertos =
             new Dictionary<string, FrmWeb>(StringComparer.OrdinalIgnoreCase);
 
         // Define la carpeta temporal de configuración.
-        private readonly string configDir =
-            Path.Combine(Path.GetTempPath(), "Mu-Util");
+        private readonly string configDir = Path.Combine(Path.GetTempPath(), "Mu-Util");
 
         // Obtiene la ruta del archivo de configuración JSON.
         private string ConfigPath => Path.Combine(configDir, "config.json");
 
         // Obtiene la ruta de la carpeta de perfiles.
         private string PerfilDir => Path.Combine(configDir, "Perfil");
+
+        //
+        private string TessdataPath => Path.Combine(configDir, "tessdata");
 
         // Almacena el nombre y la ruta de cada perfil.
         public class PerfilConfig
@@ -100,13 +36,6 @@ namespace Kapi_Mu_Utility
 
         // Indica si el clic derecho automático está activo.
         private bool clickDerechoActivo = false;
-
-        // Ejecuta acciones periódicas para los clics automáticos.
-        private readonly System.Windows.Forms.Timer timerClickDerecho =
-            new System.Windows.Forms.Timer();
-
-        // Indica si las ventanas se están distribuyendo.
-        private bool distribuirVentanas = false;
 
         // Indica si los formularios secundarios están ocultos.
         private bool formulariosOcultos = false;
@@ -125,7 +54,8 @@ namespace Kapi_Mu_Utility
             gvMain.CellDoubleClick += gvMain_CellDoubleClick;
             ConfigurarGridPerfiles();
             CargarPerfiles();
-            servicioOCR = new OCRService();
+            UnpackData();
+            servicioOCR = new OCRService(TessdataPath);
         }
         // ==================== EVENTOS DEL FORMULARIO ====================
         private void FrmMain_Load(object sender, EventArgs e)
@@ -154,22 +84,7 @@ namespace Kapi_Mu_Utility
         }
         private void FrmMain_FormClosed(object sender, FormClosedEventArgs e)
         {
-            if (f8Registrado)
-            {
-                UnregisterHotKey(this.Handle, HOTKEY_ID);
-                f8Registrado = false;
-            }
-        }
-
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
-        {
-            if (keyData == Keys.Enter)
-            {
-                loadWebForm();
-                return true;
-            }
-
-            return base.ProcessCmdKey(ref msg, keyData);
+            
         }
         // ==================== EVENTOS DE LOS BOTONES ====================
         private void btnAdd_Click(object sender, EventArgs e)
@@ -472,60 +387,6 @@ namespace Kapi_Mu_Utility
                     MessageBoxIcon.Error);
             }
         }
-        private static async Task<bool> ClickDerechoEnAsync(
-                                                            int x,
-                                                            int y,
-                                                            CancellationToken token)
-        {
-            token.ThrowIfCancellationRequested();
-
-            Cursor.Position = new Point(x, y);
-
-            INPUT[] presionar =
-            {
-        new INPUT
-        {
-            type = INPUT_MOUSE,
-            mi = new MOUSEINPUT
-            {
-                dwFlags = MOUSEEVENTF_RIGHTDOWN
-            }
-        }
-    };
-
-            uint enviados = SendInput(
-                1,
-                presionar,
-                Marshal.SizeOf<INPUT>());
-
-            if (enviados != 1)
-                return false;
-
-            try
-            {
-                await Task.Delay(INTERVALO_PRESS_MS, token);
-                return true;
-            }
-            finally
-            {
-                INPUT[] soltar =
-                {
-            new INPUT
-            {
-                type = INPUT_MOUSE,
-                mi = new MOUSEINPUT
-                {
-                    dwFlags = MOUSEEVENTF_RIGHTUP
-                }
-            }
-        };
-
-                SendInput(
-                    1,
-                    soltar,
-                    Marshal.SizeOf<INPUT>());
-            }
-        }
         private List<PerfilConfig> LeerPerfiles()
         {
             Directory.CreateDirectory(configDir);
@@ -563,81 +424,7 @@ namespace Kapi_Mu_Utility
                 }
             }
         }
-        private void DetenerClickDerecho()
-        {
-            clickDerechoActivo = false;
-            clickCts?.Cancel();
-        }
-        private async Task EjecutarClicksAsync(CancellationToken token)
-        {
-            while (true)
-            {
-                token.ThrowIfCancellationRequested();
-
-                await ClickDerechoCentroVentanasAsync(token);
-
-                await Task.Delay(INTERVALO_CLICK_MS, token);
-            }
-        }
-        private async Task ClickDerechoCentroVentanasAsync(CancellationToken token)
-        {
-            foreach (DataGridViewRow fila in gvMain.Rows)
-            {
-                token.ThrowIfCancellationRequested();
-
-                if (fila.IsNewRow)
-                    continue;
-
-                bool participa = fila.Cells[1].Value is bool valor && valor;
-
-                if (!participa)
-                    continue;
-
-                string carpetaPerfil = fila.Tag as string;
-
-                if (string.IsNullOrEmpty(carpetaPerfil))
-                    continue;
-
-                if (!frmWebAbiertos.TryGetValue(
-                        carpetaPerfil, out FrmWeb frm))
-                    continue;
-
-                if (frm.IsDisposed || !frm.Visible)
-                    continue;
-
-                Point centro = new Point(
-                    frm.ClientSize.Width / 2,
-                    frm.ClientSize.Height / 2);
-
-                Point posicion = frm.PointToScreen(centro);
-
-                token.ThrowIfCancellationRequested();
-
-                // Primer clic derecho.
-                bool realizado = await ClickDerechoEnAsync(
-                    posicion.X,
-                    posicion.Y,
-                    token);
-
-                if (!realizado)
-                    continue;
-
-                // Pequeña pausa entre los dos clics.
-                await Task.Delay(10, token);
-
-                // Segundo clic derecho.
-                realizado = await ClickDerechoEnAsync(
-                    posicion.X,
-                    posicion.Y,
-                    token);
-
-                if (!realizado)
-                    continue;
-
-                // Dar tiempo para que la aplicación procese el clic.
-                await Task.Delay(10, token);
-            }
-        }
+        
         private void OrganizarVentanas()
         {
             var ventanasActivas = new List<FrmWeb>();
@@ -753,31 +540,6 @@ namespace Kapi_Mu_Utility
                 ventana.BringToFront();
             }
         }
-        private void RestaurarVentanas()
-        {
-            foreach (FrmWeb frm in frmWebAbiertos.Values.ToList())
-            {
-                if (!frm.IsDisposed)
-                {
-                    frm.Show();
-                }
-            }
-        }
-
-        private void CambiarIconoTodasLasVentanas(Icon icono)
-        {
-            // Cambiar el icono del formulario principal
-            this.Icon = icono;
-
-            // Cambiar el icono de todos los formularios secundarios
-            foreach (FrmWeb frm in frmWebAbiertos.Values.ToList())
-            {
-                if (!frm.IsDisposed)
-                {
-                    frm.Icon = icono;
-                }
-            }
-        }
         private void ConfigurarGridPerfiles()
         {
             gvMain.Columns.Clear();
@@ -812,22 +574,6 @@ namespace Kapi_Mu_Utility
                         DataGridViewDataErrorContexts.Commit);
                 }
             };
-        }
-        private bool HayVentanasSeleccionadas()
-        {
-            foreach (DataGridViewRow fila in gvMain.Rows)
-            {
-                if (fila.IsNewRow)
-                    continue;
-
-                if (fila.Cells[1].Value is bool participa
-                    && participa)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
         private void SeleccionarSiguientePerfil()
         {
@@ -872,90 +618,50 @@ namespace Kapi_Mu_Utility
                 }
             }
         }
-        private async void ToogleBtnActive()
+        private void UnpackData()
         {
-            // Si ya está activo, F8 lo detiene inmediatamente.
-            if (clickDerechoActivo)
-            {
-                DetenerClickDerecho();
-                return;
-            }
+            Directory.CreateDirectory(TessdataPath);
 
-            // Evitar iniciar dos procesos simultáneos.
-            if (cambiandoEstado)
-                return;
-
-            // Validar que al menos una ventana tenga marcado Click.
-            if (!HayVentanasSeleccionadas())
+            foreach (string language in new[] { "spa", "eng" })
             {
-                MessageBox.Show(
-                    "Debes activar al menos una ventana en la columna Click.",
-                    "Selecciona una ventana",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
+                string outputFile = Path.Combine(
+                    TessdataPath,
+                    $"{language}.traineddata"
                 );
 
-                return;
-            }
+                // Evitar extraer nuevamente si ya existe
+                if (File.Exists(outputFile))
+                    continue;
 
-            cambiandoEstado = true;
 
-            var cts = new CancellationTokenSource();
-            clickCts = cts;
-            CancellationToken token = cts.Token;
 
-            clickDerechoActivo = true;
-            btnActive.Text = "Detener (F8)";
-
-            try
-            {
-                this.Icon = SystemIcons.Warning;
-                CambiarIconoTodasLasVentanas(SystemIcons.Warning);
-
-                // Organizar antes de calcular las posiciones.
-                OrganizarVentanas();
-
-                // Esperar a que Windows procese las posiciones.
-                await Task.Delay(300, token);
-
-                token.ThrowIfCancellationRequested();
-
-                // Iniciar los clics.
-                await EjecutarClicksAsync(token);
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancelación normal mediante F8.
-            }
-            finally
-            {
-                clickDerechoActivo = false;
-
-                if (ReferenceEquals(clickCts, cts))
-                    clickCts = null;
-
-                cts.Dispose();
-
-                this.Icon = SystemIcons.Application;
-                CambiarIconoTodasLasVentanas(SystemIcons.Application);
-
-                RestaurarVentanas();
-
-                btnActive.Text = "Activar F8";
-                cambiandoEstado = false;
+                using (Stream resource = CargarRecursoStream($"{language}.traineddata"))
+                using (FileStream file = File.Create(outputFile))
+                {
+                    resource.CopyTo(file);
+                }
             }
         }
-        protected override void WndProc(ref Message m)
+        private static Stream CargarRecursoStream(string nombreArchivo)
         {
-            if (m.Msg == WM_HOTKEY &&
-                m.WParam.ToInt32() == HOTKEY_ID)
-            {
-                ToogleBtnActive();
-            }
+            var assembly = Assembly.GetExecutingAssembly();
 
-            base.WndProc(ref m);
+            string nombreRecurso = assembly
+                .GetManifestResourceNames()
+                .FirstOrDefault(nombre =>
+                    nombre.EndsWith(
+                        $"recursos.{nombreArchivo}",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+
+            if (nombreRecurso == null)
+                throw new FileNotFoundException(
+                    $"No se encontró el recurso: {nombreArchivo}"
+                );
+
+            return assembly.GetManifestResourceStream(nombreRecurso);
         }
-
         
     }
 }

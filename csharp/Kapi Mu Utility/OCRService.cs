@@ -10,14 +10,10 @@ namespace Kapi_Mu_Utility
         private readonly TesseractEngine motorOCR;
         private readonly SemaphoreSlim semaforo = new(1, 1);
 
-        public OCRService()
+        public OCRService(string vvPath)
         {
-            string rutaTessdata = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "tessdata");
-
             motorOCR = new TesseractEngine(
-                rutaTessdata,
+                vvPath,
                 "spa+eng",
                 EngineMode.Default);
         }

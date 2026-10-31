@@ -9,23 +9,26 @@ namespace Kapi_Mu_Utility
 {
     public class OCRHelper
     {
-        private readonly int intervaloCompleto = 5;
+        private readonly int intervaloCompleto = 20;
         private int contadorImagenes = 0;
         private const int ANCHO_REFERENCIA = 1280;
         private const int ALTO_REFERENCIA = 720;
         private static readonly Bitmap TradeReferencia = CargarRecurso("TradeReference.png");
         private readonly OCRService servicioOCR;
-        public OCRHelper(OCRService servicioOCR)
+        private readonly BuscadorDePlantillas searchIMG = new BuscadorDePlantillas();
+        private readonly string vvPerfil;
+        public OCRHelper(OCRService servicioOCR, string vvPerfil)
         {
             if (intervaloCompleto < 1)
                 throw new ArgumentOutOfRangeException(
                     nameof(intervaloCompleto));
             this.servicioOCR = servicioOCR;
+            this.vvPerfil = vvPerfil;
         }
 
         public async Task<HelperResponse> ValidarImagen(
-            byte[] imagen,
-            CancellationToken token = default)
+    byte[] imagen,
+    CancellationToken token = default)
         {
             if (imagen == null || imagen.Length == 0)
                 return new HelperResponse(ActionType.Error, "001 Imagen No Valida");
@@ -34,43 +37,151 @@ namespace Kapi_Mu_Utility
 
             contadorImagenes++;
 
+            // Primero buscar Trade
+            System.Diagnostics.Debug.WriteLine($"{vvPerfil} Buscando Trade");
+            var resultadoTrade = DetectarTrade(imagen);
+
+            if (resultadoTrade != null)
+                return resultadoTrade;
+
+            // Si no encontró Trade, evaluar búsqueda completa
             bool validarTodo = contadorImagenes >= intervaloCompleto;
 
             if (validarTodo)
             {
-                System.Diagnostics.Debug.WriteLine($"ValidarTodo");
+                System.Diagnostics.Debug.WriteLine($"{vvPerfil} ValidarTodo");
                 contadorImagenes = 0;
+
                 return await DetectarDesconexionError(imagen, token);
             }
-            else {
-                System.Diagnostics.Debug.WriteLine($"TradeEvent");
-                return DetectarTrade(imagen);
+
+            return new HelperResponse(ActionType.Error, "Sin resultados");
+        }
+        public async Task<Point?> ComparaSkill(byte[] imagen, string path)
+        {
+            try
+            {
+                byte[] recorte = GetSkill(imagen);
                 
+                if (recorte == null || recorte.Length == 0)
+                    return null;
+
+                string archivo = Path.Combine(path, "skill.png");
+
+                using (Bitmap skill = new Bitmap(archivo))
+                {
+                    bool result = CompararImagenes(recorte, skill, 0.80);
+
+                    if (!result)
+                    {
+                        using (MemoryStream ms = new MemoryStream(imagen))
+                        using (Bitmap original = new Bitmap(ms))
+                        {
+                            int x = (int)((0.485 + 0.025 / 2) * original.Width);
+                            int y = (int)((0.94 + 0.05 / 2) * original.Height);
+
+                            return new Point(x, y);
+                        }
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"{vvPerfil} Error comparando Skill: {ex}");
+
+                return null;
             }
         }
+        public async Task<Point?> BuscaSKill(byte[] imagen, string path)
+        {
+            try
+            {
+                double umbral = 0.80;
+                string pathSkill = Path.Combine(path, "skill.png");
+                //for dev Save Imagen
+                string pathImg = Path.Combine(path, "screen.png");
+                await File.WriteAllBytesAsync(pathImg, imagen);
+                //
+                using (Bitmap skill = new Bitmap(pathSkill)) {
+                    if (searchIMG.BuscaImagen(imagen, skill,
+                                                umbral,
+                                                out Point punto))
+                    {
+                        // Icono encontrado
+                        return punto;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"{vvPerfil} No se encontró el icono.");
+                        return null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"{vvPerfil} Error comparando Skill: {ex}");
 
-        public bool ValidarJuego(byte[] imagen) {
-            if (imagen == null || imagen.Length == 0)
-                return false;
-            double xRelativo = 0.81;
-            double yRelativo = 0.02;
-            double anchoRelativo = 0.045;
-            double altoRelativo = 0.07917;
-            byte[] recorte = RecortarImagen(imagen, xRelativo, yRelativo, anchoRelativo, altoRelativo);
-            if (recorte == null)
-                return false;
-
-            //
-            string carpeta = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Output");
-            Directory.CreateDirectory(carpeta);
-            File.WriteAllBytes(Path.Combine(carpeta, $"Desconexion_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png"), recorte);
-
-
-            //
-
-            return false;
+                return null;
+            }
         }
+        public async Task<bool> GuardarSkill(byte[] imagen, string path)
+        {
+            try
+            {
+                // Obtener el recorte mediante GetSkill
+                byte[] recorte = GetSkill(imagen);
 
+                if (recorte == null || recorte.Length == 0)
+                    return false;
+
+                // Guardar el recorte en disco
+                string archivo = Path.Combine(path, "skill.png");
+
+                await File.WriteAllBytesAsync(archivo, recorte);
+
+                return File.Exists(archivo) &&
+                       new FileInfo(archivo).Length == recorte.Length;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"{vvPerfil} Error guardando Skill: {ex}");
+
+                return false;
+            }
+        }
+        private byte[] GetSkill(byte[] imagen)
+        {
+            if (imagen == null || imagen.Length == 0)
+                return null;
+
+            try
+            {
+                double xRelativo = 0.485;
+                double yRelativo = 0.94;
+                double anchoRelativo = 0.025;
+                double altoRelativo = 0.05;
+
+                return RecortarImagen(
+                    imagen,
+                    xRelativo,
+                    yRelativo,
+                    anchoRelativo,
+                    altoRelativo);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"{vvPerfil} Error obteniendo Skill: {ex}");
+
+                return null;
+            }
+        }
         private HelperResponse DetectarTrade(byte[] imagen)
         {
             if (imagen == null || imagen.Length == 0)
@@ -119,7 +230,7 @@ namespace Kapi_Mu_Utility
             if (!punto.HasValue)
                 return null;
 
-            System.Diagnostics.Debug.WriteLine($"Desconexión detectada en {punto.Value}");
+            System.Diagnostics.Debug.WriteLine($"{vvPerfil} Desconexión detectada en {punto.Value}");
 
             return new HelperResponse(
                 ActionType.Reconexion,
@@ -194,7 +305,7 @@ namespace Kapi_Mu_Utility
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
-                    $"Error recortando imagen: {ex.Message}");
+                    $"{vvPerfil} Error recortando imagen: {ex.Message}");
 
                 return null;
             }
@@ -312,11 +423,12 @@ namespace Kapi_Mu_Utility
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
-                    $"Error comparando imágenes: {ex.Message}");
+                    $"{vvPerfil} Error comparando imágenes: {ex.Message}");
 
                 return false;
             }
         }
+        
         private static Bitmap CargarRecurso(string nombreArchivo)
         {
             var assembly = Assembly.GetExecutingAssembly();
@@ -346,16 +458,19 @@ namespace Kapi_Mu_Utility
         }
         #region OCR
         private async Task<Point?> BuscarTextoAsync(
-        byte[] imagen,
-        CancellationToken token,
-        params string[] textosBuscar)
+    byte[] imagen,
+    CancellationToken token,
+    params string[] textosBuscar)
         {
-            if (imagen == null || imagen.Length == 0 || textosBuscar == null || textosBuscar.Length == 0)
+            if (imagen == null || imagen.Length == 0 ||
+                textosBuscar == null || textosBuscar.Length == 0)
                 return null;
 
             var textosNormalizados = textosBuscar
                 .Where(t => !string.IsNullOrWhiteSpace(t))
                 .Select(NormalizarTexto)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct()
                 .ToArray();
 
             if (textosNormalizados.Length == 0)
@@ -363,53 +478,93 @@ namespace Kapi_Mu_Utility
 
             return await servicioOCR.EjecutarAsync(engine =>
             {
-                using var pixOriginal = Pix.LoadFromMemory(imagen);
-                using var pixGray = pixOriginal.ConvertRGBToGray();
+                using var original = Pix.LoadFromMemory(imagen);
+                using var gris = original.ConvertRGBToGray();
 
-                // SOLUCIÓN AL CAMBIO DE MAPAS: Forzar binarización limpia (Blanco y Negro puro)
-                // Otsu adaptativo calcula el umbral perfecto sin importar si el fondo del mapa es claro u oscuro.
-                using var pix = pixGray.BinarizeOtsuAdaptiveThreshold(200, 200, 10, 10, 0.10f);
+                // Segunda versión: binarización adaptativa para fondos
+                // con iluminación desigual.
+                using var binario =
+                    gris.BinarizeOtsuAdaptiveThreshold(
+                        200, 200, 10, 10, 0.10f);
 
-                // Usamos SingleBlock o Auto. Si la pantalla tiene mucha interfaz, SingleBlock fuerza a buscar bloques sólidos de texto
-                using var page = engine.Process(pix, PageSegMode.Auto);
-                using var iter = page.GetIterator();
-
-                if (iter == null) return null;
-
-                iter.Begin();
-
-                do
+                Point? BuscarEnPix(Pix pix, PageSegMode modo)
                 {
-                    token.ThrowIfCancellationRequested();
+                    using var page = engine.Process(pix, modo);
+                    using var iter = page.GetIterator();
 
-                    // Usamos un bloque try-catch interno o validación de seguridad porque GetText en TextLine 
-                    // a veces falla si el iterador encuentra "basura" visual en los fondos de ciertos mapas.
-                    string linea = null;
-                    try
+                    if (iter == null)
+                        return null;
+
+                    iter.Begin();
+
+                    do
                     {
-                        linea = iter.GetText(PageIteratorLevel.TextLine);
-                    }
-                    catch { continue; }
+                        token.ThrowIfCancellationRequested();
 
-                    if (string.IsNullOrWhiteSpace(linea))
-                        continue;
+                        string linea;
 
-                    string texto = NormalizarTexto(linea);
+                        try
+                        {
+                            linea = iter.GetText(
+                                PageIteratorLevel.TextLine);
+                        }
+                        catch
+                        {
+                            continue;
+                        }
 
-                    // Cambiado a coincidencia flexible (por si el OCR lee caracteres extraños pegados al texto)
-                    if (textosNormalizados.Any(t => texto.Contains(t)))
-                    {
-                        if (iter.TryGetBoundingBox(PageIteratorLevel.TextLine, out var rect))
+                        if (string.IsNullOrWhiteSpace(linea))
+                            continue;
+
+                        string texto = NormalizarTexto(linea);
+
+                        if (!textosNormalizados.Any(t =>
+                            texto.Contains(
+                                t, StringComparison.OrdinalIgnoreCase)))
+                            continue;
+
+                        if (iter.TryGetBoundingBox(
+                            PageIteratorLevel.TextLine,
+                            out var rect))
                         {
                             return new Point(
                                 (rect.X1 + rect.X2) / 2,
                                 (rect.Y1 + rect.Y2) / 2);
                         }
                     }
-                }
-                while (iter.Next(PageIteratorLevel.TextLine));
+                    while (iter.Next(PageIteratorLevel.TextLine));
 
-                return (Point?)null;
+                    return null;
+                }
+
+                // PASADA 1: escala de grises, conservando los tonos originales.
+                token.ThrowIfCancellationRequested();
+
+                var punto = BuscarEnPix(gris, PageSegMode.Auto);
+
+                if (punto.HasValue)
+                    return punto;
+
+                // PASADA 2: escala de grises con segmentación de línea.
+                token.ThrowIfCancellationRequested();
+
+                punto = BuscarEnPix(gris, PageSegMode.SingleLine);
+
+                if (punto.HasValue)
+                    return punto;
+
+                // PASADA 3: binarización adaptativa.
+                token.ThrowIfCancellationRequested();
+
+                punto = BuscarEnPix(binario, PageSegMode.Auto);
+
+                if (punto.HasValue)
+                    return punto;
+
+                // PASADA 4: binarización adaptativa como línea única.
+                token.ThrowIfCancellationRequested();
+
+                return BuscarEnPix(binario, PageSegMode.SingleLine);
 
             }, token);
         }
@@ -423,6 +578,7 @@ namespace Kapi_Mu_Utility
                          (char[])null,
                          StringSplitOptions.RemoveEmptyEntries));
         }
+        
         #endregion
     }
 }

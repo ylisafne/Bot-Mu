@@ -15,6 +15,7 @@
   <SelfContained>true</SelfContained>
   <PublishSingleFile>true</PublishSingleFile>
   <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   <DebugType>none</DebugType>
 </PropertyGroup>
@@ -29,14 +30,22 @@
 
   <ItemGroup>
     <None Remove="recursos\TradeReference.png" />
+    <None Remove="tessdata\eng.traineddata" />
+    <None Remove="tessdata\spa.traineddata" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="recursos\Icono.ico" />
+    <EmbeddedResource Include="recursos\spa.traineddata">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="recursos\TradeReference.png" />
+    <EmbeddedResource Include="recursos\eng.traineddata">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
@@ -45,21 +54,16 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.13.0.20260627" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
     <PackageReference Include="System.Management" Version="10.0.14" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Properties\" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="tessdata\eng.traineddata">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="tessdata\spa.traineddata">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <Folder Include="tessdata\" />
   </ItemGroup>
   
   <Target Name="ObfuscateBeforeSingleFileBundle" BeforeTargets="GenerateSingleFileBundle" DependsOnTargets="PrepareForBundle" Condition="'$(PublishSingleFile)' == 'true' and '$(Configuration)' == 'Release'">

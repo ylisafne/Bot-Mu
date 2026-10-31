@@ -33,5 +33,15 @@
             public int PausaMs { get; set; } = 0;
             public bool EsperarCarga { get; set; }
         }
+        public class DatosCaptura
+        {
+            public byte[] Imagen { get; set; }
+
+            public int AnchoCaptura { get; set; }
+            public int AltoCaptura { get; set; }
+
+            public int AnchoCSS { get; set; }
+            public int AltoCSS { get; set; }
+        }
     }
 }
