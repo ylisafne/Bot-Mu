@@ -1,9 +1,24 @@
-﻿using System.Drawing;
+﻿using System;
+using System;
+using System.Drawing;
+using System.Drawing;
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Globalization;
+using System.IO;
+using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Threading.Tasks;
 using Tesseract;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
+using static System.Net.Mime.MediaTypeNames;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace Kapi_Mu_Utility
 {
@@ -45,7 +60,7 @@ namespace Kapi_Mu_Utility
                 return resultadoTrade;
 
             // Si no encontró Trade, evaluar búsqueda completa
-            bool validarTodo = contadorImagenes >= intervaloCompleto;
+            bool validarTodo = false; //contadorImagenes >= intervaloCompleto;
 
             if (validarTodo)
             {
@@ -57,7 +72,359 @@ namespace Kapi_Mu_Utility
 
             return new HelperResponse(ActionType.Error, "Sin resultados");
         }
-        public async Task<Point?> ComparaSkill(byte[] imagen, string path)
+
+        //
+        public async Task<Point?> ObtenerPosicionPersonajeAsync(
+    byte[] imagen,
+    string characterName,
+    CancellationToken token = default)
+        {
+            if (imagen == null || imagen.Length == 0 ||
+                string.IsNullOrWhiteSpace(characterName))
+                return null;
+
+            double anchoRelativo = 0.08;
+            double altoRelativo = 0.03;
+
+            // Obtener dimensiones originales de la imagen.
+            using var ms = new MemoryStream(imagen);
+            using var bitmap = new Bitmap(ms);
+
+            double anchoImagen = bitmap.Width;
+            double altoImagen = bitmap.Height;
+
+            // Coordenadas relativas de los personajes.
+            var posiciones = new[]
+                {
+                    (X: 0.210, Y: 0.423),
+                    (X: 0.344, Y: 0.418),
+                    (X: 0.473, Y: 0.418),
+                    (X: 0.600, Y: 0.420),
+                    (X: 0.730, Y: 0.428)
+                };
+
+            foreach (var posicion in posiciones)
+            {
+                token.ThrowIfCancellationRequested();
+
+                byte[] recorte = RecortarImagen(
+                    imagen,
+                    posicion.X,
+                    posicion.Y,
+                    anchoRelativo,
+                    altoRelativo);
+
+                bool encontrado = await ExistePalabraEnImagenAsync(
+                    recorte,
+                    characterName,
+                    token);
+
+                if (encontrado)
+                {
+                    // Centro del recorte.
+                    double x = (posicion.X + anchoRelativo / 2) * anchoImagen;
+                    double y = (posicion.Y + altoRelativo / 2) * altoImagen;
+
+                    // Desplazamiento de 50 píxeles hacia la derecha.
+                    y += 200;
+
+                    return new Point(
+                        (int)Math.Round(x),
+                        (int)Math.Round(y));
+                }
+            }
+
+            return null;
+        }
+        public async Task<Point?> ObtenerPosicionPersonajeAsync_Basic(
+            byte[] imagen,
+            string characterName,
+            CancellationToken token = default)
+        {
+            if (imagen == null || imagen.Length == 0 || string.IsNullOrEmpty(characterName))
+                return null;
+            byte[] recorte;
+            bool result;
+
+            double anchoRelativo = 0.08;
+            double altoRelativo = 0.03;
+
+            // Personaje 1
+            double xRelativo_1 = 0.210;
+            double yRelativo_1 = 0.423;
+            recorte = RecortarImagen(imagen, xRelativo_1, yRelativo_1, anchoRelativo, altoRelativo);
+            result = await ExistePalabraEnImagenAsync(recorte, characterName);
+
+
+
+
+
+            string vv_File_1 = Path.Combine(AppContext.BaseDirectory, "output", "recorte_1.png");
+            File.WriteAllBytes(vv_File_1, recorte);
+
+            // Personaje 2
+            double xRelativo_2 = 0.344;
+            double yRelativo_2 = 0.418;
+            recorte = RecortarImagen(imagen, xRelativo_2, yRelativo_2, anchoRelativo, altoRelativo);
+            result = await ExistePalabraEnImagenAsync(recorte, characterName);
+
+            string vv_File_2 = Path.Combine(AppContext.BaseDirectory, "output", "recorte_2.png");
+            File.WriteAllBytes(vv_File_2, recorte);
+
+            // Personaje 3
+            double xRelativo_3 = 0.473;
+            double yRelativo_3 = 0.418;
+            recorte = RecortarImagen(imagen, xRelativo_3, yRelativo_3, anchoRelativo, altoRelativo);
+            result = await ExistePalabraEnImagenAsync(recorte, characterName);
+
+            string vv_File_3 = Path.Combine(AppContext.BaseDirectory, "output", "recorte_3.png");
+            File.WriteAllBytes(vv_File_3, recorte);
+
+            // Personaje 4
+            double xRelativo_4 = 0.600;
+            double yRelativo_4 = 0.420;
+            recorte = RecortarImagen(imagen, xRelativo_4, yRelativo_4, anchoRelativo, altoRelativo);
+            result = await ExistePalabraEnImagenAsync(recorte, characterName);
+
+            string vv_File_4 = Path.Combine(AppContext.BaseDirectory, "output", "recorte_4.png");
+            File.WriteAllBytes(vv_File_4, recorte);
+
+            // Personaje 5
+            double xRelativo_5 = 0.730;
+            double yRelativo_5 = 0.428;
+            recorte = RecortarImagen(imagen, xRelativo_5, yRelativo_5, anchoRelativo, altoRelativo);
+            result = await ExistePalabraEnImagenAsync(recorte, characterName);
+
+            string vv_File_5 = Path.Combine(AppContext.BaseDirectory, "output", "recorte_5.png");
+            File.WriteAllBytes(vv_File_5, recorte);
+
+
+            return null;
+
+
+        }
+        public async Task<bool> ExistePalabraEnImagenAsync( byte[] imagen,
+                                                            string palabra,
+                                                            CancellationToken token = default)
+        {
+            if (imagen == null || imagen.Length == 0 ||
+                string.IsNullOrWhiteSpace(palabra))
+                return false;
+
+            string textoOCR = await servicioOCR.EjecutarAsync(engine =>
+            {
+                using var pix = Pix.LoadFromMemory(imagen);
+                using var pagina = engine.Process(
+                    pix,
+                    PageSegMode.SingleLine);
+
+                return pagina.GetText() ?? string.Empty;
+
+            }, token);
+
+            if (string.IsNullOrWhiteSpace(textoOCR))
+                return false;
+
+            string Normalizar(string texto)
+            {
+                texto = texto.ToUpperInvariant()
+                    .Normalize(NormalizationForm.FormD);
+
+                var resultado = new StringBuilder();
+
+                foreach (char c in texto)
+                {
+                    if (CharUnicodeInfo.GetUnicodeCategory(c) ==
+                        UnicodeCategory.NonSpacingMark)
+                        continue;
+
+                    if (char.IsLetterOrDigit(c))
+                        resultado.Append(c);
+                }
+
+                return resultado.ToString();
+            }
+
+            string texto = Normalizar(textoOCR);
+            string objetivo = Normalizar(palabra);
+
+            if (string.IsNullOrEmpty(texto) ||
+                string.IsNullOrEmpty(objetivo))
+                return false;
+
+            // Coincidencia exacta normalizada.
+            if (texto.Contains(objetivo))
+                return true;
+
+            // Equivalencias frecuentes de OCR.
+            string CorregirOCR(string valor)
+            {
+                return valor
+                    .Replace('0', 'O')
+                    .Replace('1', 'I')
+                    .Replace('5', 'S')
+                    .Replace('8', 'B');
+            }
+
+            texto = CorregirOCR(texto);
+            objetivo = CorregirOCR(objetivo);
+
+            if (texto.Contains(objetivo))
+                return true;
+
+            // Distancia Levenshtein.
+            int Distancia(string a, string b)
+            {
+                int[,] matriz = new int[a.Length + 1, b.Length + 1];
+
+                for (int i = 0; i <= a.Length; i++)
+                    matriz[i, 0] = i;
+
+                for (int j = 0; j <= b.Length; j++)
+                    matriz[0, j] = j;
+
+                for (int i = 1; i <= a.Length; i++)
+                {
+                    for (int j = 1; j <= b.Length; j++)
+                    {
+                        int costo = a[i - 1] == b[j - 1] ? 0 : 1;
+
+                        matriz[i, j] = Math.Min(
+                            Math.Min(
+                                matriz[i - 1, j] + 1,
+                                matriz[i, j - 1] + 1),
+                            matriz[i - 1, j - 1] + costo);
+                    }
+                }
+
+                return matriz[a.Length, b.Length];
+            }
+
+            // Comparar palabras completas.
+            foreach (Match coincidencia in Regex.Matches(
+                texto,
+                @"[\p{L}\p{N}]+"))
+            {
+                string encontrada = coincidencia.Value;
+
+                if (Math.Abs(encontrada.Length - objetivo.Length) <= 1 &&
+                    Distancia(encontrada, objetivo) <= 1)
+                    return true;
+            }
+
+            return false;
+        }
+        public HelperResponse DetectarSeleccionPjTest(byte[] imagen)
+        {
+            if (imagen == null || imagen.Length == 0)
+                return null;
+
+            double xRelativo = 0.205;
+            double yRelativo = 0.425;
+            double anchoRelativo = 0.5;
+            double altoRelativo = 0.5;
+
+            string eval = "X"; // X o Y
+
+            if (eval.ToUpper() == "X") {
+                for (double x = xRelativo; x < 1; x += 0.01)
+                {
+
+                    byte[] recorte = RecortarImagen(
+                        imagen,
+                        x,
+                        yRelativo,
+                        anchoRelativo,
+                        altoRelativo
+                    );
+
+                    if (recorte == null)
+                        continue;
+
+                    string carpetaEjecucion = AppContext.BaseDirectory;
+                    string carpetaOutput = Path.Combine(carpetaEjecucion, "output");
+
+                    string nombreArchivo = $"img_{x:F3}_{yRelativo:F3}.png";
+                    string rutaCompleta = Path.Combine(carpetaOutput, nombreArchivo);
+
+                    File.WriteAllBytes(rutaCompleta, recorte);
+                }
+                return null;
+            }
+            if (eval.ToUpper() == "Y"){
+                for (double y = yRelativo; y < 1; y += 0.01)
+                {
+
+                    byte[] recorte = RecortarImagen(
+                        imagen,
+                        xRelativo,
+                        y,
+                        anchoRelativo,
+                        altoRelativo
+                    );
+
+                    if (recorte == null)
+                        continue;
+
+                    string carpetaEjecucion = AppContext.BaseDirectory;
+                    string carpetaOutput = Path.Combine(carpetaEjecucion, "output");
+
+                    string nombreArchivo = $"img_{xRelativo:F3}_{y:F3}.png";
+                    string rutaCompleta = Path.Combine(carpetaOutput, nombreArchivo);
+
+                    File.WriteAllBytes(rutaCompleta, recorte);
+                }
+                return null;
+            }
+            return null;
+        }
+        public HelperResponse DetectarSeleccionPj(byte[] imagen)
+        {
+            if (imagen == null || imagen.Length == 0)
+                return null;
+
+            double xRelativo = 0.908;
+            double yRelativo = 0.892;
+            double anchoRelativo = 0.075;
+            double altoRelativo = 0.035;
+
+            Bitmap OjReference = CargarRecurso("PjReference.png");
+
+            byte[] recorte = RecortarImagen(imagen, xRelativo, yRelativo, anchoRelativo, altoRelativo);
+            if (recorte == null)
+                return null;
+
+            //string vvFile = Path.Combine(AppContext.BaseDirectory, "output", "Compara.png");
+            //File.WriteAllBytes(vvFile, recorte);
+
+            bool resCompara = CompararImagenes(recorte, OjReference, 0.95);
+            if (!resCompara)
+                return null;
+
+            using (var ms = new MemoryStream(imagen))
+            using (var original = new Bitmap(ms))
+            {
+                int x = (int)(original.Width * xRelativo);
+                int y = (int)(original.Height * yRelativo);
+
+                int w = (int)(original.Width * anchoRelativo);
+                int h = (int)(original.Height * altoRelativo);
+
+                int mitadAncho = w / 2;
+
+                int centroX = x + mitadAncho / 2;
+                int centroY = y + h / 2;
+
+                return new HelperResponse(ActionType.SelecionPj, "Seleccion de Personaje", cursor: new System.Drawing.Point(centroX, centroY));
+            }
+        }
+
+        /// <summary>
+        /// Binariza la imagen usando memoria directa (unsafe). 
+        /// Es hasta 20 veces más rápido que GetPixel/SetPixel convencional.
+        /// </summary>
+
+        public async Task<System.Drawing.Point?> ComparaSkill(byte[] imagen, string path)
         {
             try
             {
@@ -80,7 +447,7 @@ namespace Kapi_Mu_Utility
                             int x = (int)((0.485 + 0.025 / 2) * original.Width);
                             int y = (int)((0.94 + 0.05 / 2) * original.Height);
 
-                            return new Point(x, y);
+                            return new System.Drawing.Point(x, y);
                         }
                     }
                 }
@@ -95,20 +462,20 @@ namespace Kapi_Mu_Utility
                 return null;
             }
         }
-        public async Task<Point?> BuscaSKill(byte[] imagen, string path)
+        public async Task<System.Drawing.Point?> BuscaSKill(byte[] imagen, string path)
         {
             try
             {
                 double umbral = 0.80;
                 string pathSkill = Path.Combine(path, "skill.png");
                 //for dev Save Imagen
-                string pathImg = Path.Combine(path, "screen.png");
-                await File.WriteAllBytesAsync(pathImg, imagen);
+                //string pathImg = Path.Combine(path, "screen.png");
+                //await File.WriteAllBytesAsync(pathImg, imagen);
                 //
                 using (Bitmap skill = new Bitmap(pathSkill)) {
                     if (searchIMG.BuscaImagen(imagen, skill,
                                                 umbral,
-                                                out Point punto))
+                                                out System.Drawing.Point punto))
                     {
                         // Icono encontrado
                         return punto;
@@ -182,6 +549,7 @@ namespace Kapi_Mu_Utility
                 return null;
             }
         }
+        
         private HelperResponse DetectarTrade(byte[] imagen)
         {
             if (imagen == null || imagen.Length == 0)
@@ -212,7 +580,7 @@ namespace Kapi_Mu_Utility
                 int centroX = x + w / 2;
                 int centroY = y + h / 2;
 
-                return new HelperResponse(ActionType.Trade, "Trade Detectado", cursor: new Point(centroX, centroY));
+                return new HelperResponse(ActionType.Trade, "Trade Detectado", cursor: new System.Drawing.Point(centroX, centroY));
             }
         }
 
@@ -220,7 +588,7 @@ namespace Kapi_Mu_Utility
             byte[] imagen,
             CancellationToken token)
         {
-            Point? punto = await BuscarTextoAsync(
+            System.Drawing.Point? punto = await BuscarTextoAsync(
                 imagen,
                 token,
                 "Volver a entrar",
@@ -428,7 +796,78 @@ namespace Kapi_Mu_Utility
                 return false;
             }
         }
-        
+
+        private bool CompararImagenesProm(
+            byte[] imagenBytes,
+            Bitmap referencia,
+            double similitudMinima = 0.90)
+        {
+            if (imagenBytes == null ||
+                imagenBytes.Length == 0 ||
+                referencia == null)
+                return false;
+
+            try
+            {
+                using (var ms = new MemoryStream(imagenBytes))
+                using (var original = new Bitmap(ms))
+                using (var imagenA = new Bitmap(
+                    original,
+                    referencia.Width,
+                    referencia.Height))
+                using (var imagenB = new Bitmap(
+                    referencia.Width,
+                    referencia.Height))
+                {
+                    using (Graphics g = Graphics.FromImage(imagenB))
+                    {
+                        g.DrawImage(
+                            referencia,
+                            0, 0,
+                            referencia.Width,
+                            referencia.Height);
+                    }
+
+                    double sumaDiferencias = 0;
+                    int totalPixeles = referencia.Width * referencia.Height;
+
+                    for (int y = 0; y < referencia.Height; y++)
+                    {
+                        for (int x = 0; x < referencia.Width; x++)
+                        {
+                            Color a = imagenA.GetPixel(x, y);
+                            Color b = imagenB.GetPixel(x, y);
+
+                            double diferencia =
+                                (Math.Abs(a.R - b.R) +
+                                 Math.Abs(a.G - b.G) +
+                                 Math.Abs(a.B - b.B)) / 3.0;
+
+                            sumaDiferencias += diferencia;
+                        }
+                    }
+
+                    double diferenciaPromedio =
+                        sumaDiferencias / totalPixeles;
+
+                    double similitud =
+                        1.0 - (diferenciaPromedio / 255.0);
+
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Similitud: {similitud:P2}");
+
+                    return similitud >= similitudMinima;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Error comparando imágenes: {ex.Message}");
+
+                return false;
+            }
+        }
+
         private static Bitmap CargarRecurso(string nombreArchivo)
         {
             var assembly = Assembly.GetExecutingAssembly();
@@ -457,10 +896,9 @@ namespace Kapi_Mu_Utility
             }
         }
         #region OCR
-        private async Task<Point?> BuscarTextoAsync(
-    byte[] imagen,
-    CancellationToken token,
-    params string[] textosBuscar)
+        private async Task<System.Drawing.Point?> BuscarTextoAsync(byte[] imagen,
+                                                    CancellationToken token,
+                                                    params string[] textosBuscar)
         {
             if (imagen == null || imagen.Length == 0 ||
                 textosBuscar == null || textosBuscar.Length == 0)
@@ -487,7 +925,7 @@ namespace Kapi_Mu_Utility
                     gris.BinarizeOtsuAdaptiveThreshold(
                         200, 200, 10, 10, 0.10f);
 
-                Point? BuscarEnPix(Pix pix, PageSegMode modo)
+                System.Drawing. Point? BuscarEnPix(Pix pix, PageSegMode modo)
                 {
                     using var page = engine.Process(pix, modo);
                     using var iter = page.GetIterator();
@@ -527,7 +965,7 @@ namespace Kapi_Mu_Utility
                             PageIteratorLevel.TextLine,
                             out var rect))
                         {
-                            return new Point(
+                            return new System.Drawing.Point(
                                 (rect.X1 + rect.X2) / 2,
                                 (rect.Y1 + rect.Y2) / 2);
                         }

@@ -29,6 +29,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="recursos\PjReference.png" />
     <None Remove="recursos\TradeReference.png" />
     <None Remove="tessdata\eng.traineddata" />
     <None Remove="tessdata\spa.traineddata" />
@@ -36,6 +37,7 @@
 
   <ItemGroup>
     <Content Include="recursos\Icono.ico" />
+    <EmbeddedResource Include="recursos\PjReference.png" />
     <EmbeddedResource Include="recursos\spa.traineddata">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </EmbeddedResource>
