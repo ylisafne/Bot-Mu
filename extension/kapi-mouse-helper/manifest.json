@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "MU Online Canvas Monitor",
+  "version": "1.1.0",
+  "description": "Monitor persistente de actividad WebGL",
+  "permissions": ["activeTab", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "MU Canvas Monitor",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+  "matches": ["<all_urls>"],
+  "js": ["console-monitor.js"],
+  "run_at": "document_start",
+  "world": "MAIN"
+},
+    {
+  "matches": ["<all_urls>"],
+  "js": ["main.js", "loading-detector.js"],
+  "run_at": "document_start",
+  "world": "MAIN"
+},
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ]
+}
