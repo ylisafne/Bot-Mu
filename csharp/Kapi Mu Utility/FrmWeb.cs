@@ -680,15 +680,16 @@ namespace Kapi_Mu_Utility
             switch (mensaje)
             {
                 case "MU_INITIALIZED":
+                    _ = GetCurrentCharacter();
                     _muInitializedTcs?.TrySetResult(true);
                     break;
                 case "MU_ERROR":
-                    ReiniciarWebMainAsync();
                     ReconexionEvent(new Point(10, 10));
+                    _ = ReiniciarWebMainAsync();
                     break;
                 case "MU_ERROR_RELOAD_AVAILABLE":
-                    ReiniciarWebMainAsync();
                     ReconexionEvent(new Point(10, 10));
+                    _ = ReiniciarWebMainAsync();
                     break;
                 case "RARE_BUTTON_ENABLED":
                     Debug.WriteLine($"{vvPerfil} Claim Jewel of Rare");
@@ -1442,18 +1443,40 @@ namespace Kapi_Mu_Utility
             if (Interlocked.CompareExchange(ref enProceso, 1, 0) != 0)
                 return;
 
-            esperaReconexion = true;
-
-            EncolarAccionOCR(new AccionOCR
+            if (clicksActivos)
             {
-                Cursor = puntoCSS,
-                ClickDerecho = false,
-                DuracionMs = 5,
-                PausaMs = 500,
-                EsperarCarga = true
-            });
+                esperaReconexion = true;
+
+                EncolarAccionOCR(new AccionOCR
+                {
+                    Cursor = puntoCSS,
+                    ClickDerecho = false,
+                    DuracionMs = 5,
+                    PausaMs = 500,
+                    EsperarCarga = true
+                });
+            }
+            else {
+                _ = EjecutarReconexionAsync();
+            }
             //TODO EvaluarImagen si es que aun tiene el boton de trade
 
+        }
+        private async Task EjecutarReconexionAsync()
+        {
+            try
+            {
+                await EsperarCargaJuegoAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"{vvPerfil} Error reconectando: {ex}");
+            }
+            finally
+            {
+                ActualizarTitulo("");
+                Interlocked.Exchange(ref enProceso, 0);
+            }
         }
         private void TradeEvent(Point puntoCSS)
         {
@@ -1576,11 +1599,9 @@ namespace Kapi_Mu_Utility
                     $"{vvPerfil} Iniciando Juego Nuevamente"
                 );
 
-                using var ctsTimeout =
-                    CancellationTokenSource.CreateLinkedTokenSource(token);
+                using var ctsTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
 
-                using var ctsEventos =
-                    CancellationTokenSource.CreateLinkedTokenSource(ctsTimeout.Token);
+                using var ctsEventos = CancellationTokenSource.CreateLinkedTokenSource(ctsTimeout.Token);
 
                 ctsTimeout.CancelAfter(TimeSpan.FromMinutes(1));
 
@@ -1750,9 +1771,6 @@ namespace Kapi_Mu_Utility
 
                 DatosCaptura imagen = await CapturarImagenAsync();
 
-                //await ocr.DiagnosticarAsync(imagen.Imagen, token);
-
-
                 Point? punto = await ocr.ObtenerPosicionPersonajeAsync(
                     imagen.Imagen,
                     NombrePersonaje,
@@ -1822,71 +1840,92 @@ namespace Kapi_Mu_Utility
                 $"{vvPerfil}: Personaje no encontrado después de 5 intentos"
             );
 
+
             return false;
         }
         private async Task SeleccionaSKill(CancellationToken token)
         {
-            ActualizarTitulo("Skill Select...");
-            token.ThrowIfCancellationRequested();
+            const int maxIntentos = 5;
 
-            DatosCaptura imagen = await CapturarImagenAsync();
-
-            token.ThrowIfCancellationRequested();
-
-            Point? punto = await ocr.ComparaSkill(imagen.Imagen, vvRuta);
-
-            if (punto.HasValue)
+            for (int intento = 1; intento <= maxIntentos; intento++)
             {
+                token.ThrowIfCancellationRequested();
+
+                DatosCaptura imagen = await CapturarImagenAsync();
+
+                token.ThrowIfCancellationRequested();
+
+                Point? punto = await ocr.ComparaSkill(imagen.Imagen, vvRuta);
+
+                // Si devuelve null, el skill ya es el mismo.
+                if (!punto.HasValue)
+                {
+                    Debug.WriteLine($"{vvPerfil} Skill correcto.");
+                    return;
+                }
+
+                Debug.WriteLine($"{vvPerfil} Skill Diferente. Intento {intento}/{maxIntentos}");
+
+                ActualizarTitulo($"Skill Select... ({intento}/{maxIntentos})");
+
                 Point puntoCSS = ConvertirCapturaACSS(
-                        punto.Value,
-                        imagen.AnchoCaptura,
-                        imagen.AltoCaptura,
-                        imagen.AnchoCSS,
-                        imagen.AltoCSS);
+                    punto.Value,
+                    imagen.AnchoCaptura,
+                    imagen.AltoCaptura,
+                    imagen.AnchoCSS,
+                    imagen.AltoCSS);
 
-
-                System.Diagnostics.Debug.WriteLine($"{vvPerfil} Skill Diferente, Haciendo Click en X:{puntoCSS.X}, Y:{puntoCSS.Y}");
                 await EjecutarClickAsync(
-                            puntoCSS.X,
-                            puntoCSS.Y,
-                            false,
-                            200,
-                            1000,
-                            token);
-                await EjecutarClickAsync(
-                            imagen.AnchoCSS / 2,
-                            imagen.AltoCSS / 2,
-                            false,
-                            0,
-                            500,
-                            token);
-                System.Diagnostics.Debug.WriteLine($"{vvPerfil} Realizando Captura");
+                    puntoCSS.X,
+                    puntoCSS.Y,
+                    false,
+                    200,
+                    1000,
+                    token);
 
-                //Ahora Busca el skill dentro de el menu desplegado
+                await EjecutarClickAsync(
+                    imagen.AnchoCSS / 2,
+                    imagen.AltoCSS / 2,
+                    false,
+                    0,
+                    500,
+                    token);
+
+                // Buscar el skill dentro del menú desplegado.
                 DatosCaptura imagenSkills = await CapturarImagenAsync();
-                Point? skillLocation = await ocr.BuscaSKill(imagenSkills.Imagen, vvRuta);
-                if (skillLocation.HasValue) {
+
+                Point? skillLocation = await ocr.BuscaSKill(
+                    imagenSkills.Imagen,
+                    vvRuta);
+
+                if (skillLocation.HasValue)
+                {
                     Point puntoSkillCSS = ConvertirCapturaACSS(
                         skillLocation.Value,
                         imagenSkills.AnchoCaptura,
                         imagenSkills.AltoCaptura,
                         imagenSkills.AnchoCSS,
                         imagenSkills.AltoCSS);
+
                     await EjecutarClickAsync(
-                            puntoSkillCSS.X,
-                            puntoSkillCSS.Y,
-                            false,
-                            0,
-                            500,
-                            token);
+                        puntoSkillCSS.X,
+                        puntoSkillCSS.Y,
+                        false,
+                        0,
+                        500,
+                        token);
+
                     await EjecutarClickAsync(
-                            puntoSkillCSS.X,
-                            puntoSkillCSS.Y,
-                            false,
-                            50,
-                            500,
-                            token);
+                        puntoSkillCSS.X,
+                        puntoSkillCSS.Y,
+                        false,
+                        50,
+                        500,
+                        token);
                 }
+
+                // Esperar antes de volver a comprobar.
+                await Task.Delay(500, token);
             }
         }
         private async Task<string> EsperarMensajeConsolaAsync(  string palabra,

@@ -74,10 +74,9 @@ namespace Kapi_Mu_Utility
         }
 
         //
-        public async Task<Point?> ObtenerPosicionPersonajeAsync(
-    byte[] imagen,
-    string characterName,
-    CancellationToken token = default)
+        public async Task<Point?> ObtenerPosicionPersonajeAsync(byte[] imagen,
+                                                                string characterName,
+                                                                CancellationToken token = default)
         {
             if (imagen == null || imagen.Length == 0 ||
                 string.IsNullOrWhiteSpace(characterName))
@@ -253,8 +252,10 @@ namespace Kapi_Mu_Utility
                 return false;
 
             // Coincidencia exacta normalizada.
-            if (texto.Contains(objetivo))
-                return true;
+            //if (texto.Contains(objetivo))
+            //    return true;
+
+            
 
             // Equivalencias frecuentes de OCR.
             string CorregirOCR(string valor)
@@ -269,8 +270,9 @@ namespace Kapi_Mu_Utility
             texto = CorregirOCR(texto);
             objetivo = CorregirOCR(objetivo);
 
-            if (texto.Contains(objetivo))
-                return true;
+            //if (texto.Contains(objetivo))
+            //    return true;
+
 
             // Distancia Levenshtein.
             int Distancia(string a, string b)
@@ -300,6 +302,8 @@ namespace Kapi_Mu_Utility
                 return matriz[a.Length, b.Length];
             }
 
+
+            //
             // Comparar palabras completas.
             foreach (Match coincidencia in Regex.Matches(
                 texto,
@@ -311,6 +315,17 @@ namespace Kapi_Mu_Utility
                     Distancia(encontrada, objetivo) <= 1)
                     return true;
             }
+            // Comparar palabras completas.
+            //foreach (Match coincidencia in Regex.Matches(
+            //    texto,
+            //    @"[\p{L}\p{N}]+"))
+            //{
+            //    string encontrada = coincidencia.Value;
+            //
+            //    if (Math.Abs(encontrada.Length - objetivo.Length) <= 1 &&
+            //        Distancia(encontrada, objetivo) <= 1)
+            //        return true;
+            //}
 
             return false;
         }
