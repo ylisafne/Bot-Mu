@@ -1,0 +1,108 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MU Online - Monitor</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #111827;
+      color: #e5e7eb;
+      font: 14px Arial, sans-serif;
+    }
+
+    h1 { font-size: 24px; }
+
+    .status {
+      padding: 16px;
+      background: #1f2937;
+      border-radius: 8px;
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .card {
+      padding: 16px;
+      background: #1f2937;
+      border-radius: 8px;
+    }
+
+    .label {
+      color: #9ca3af;
+      margin-bottom: 8px;
+    }
+
+    .value { font-size: 22px; }
+
+    #log {
+      background: #030712;
+      padding: 16px;
+      border-radius: 8px;
+      max-height: 400px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font: 12px monospace;
+    }
+
+    button {
+      padding: 10px 16px;
+      margin: 8px 8px 8px 0;
+      cursor: pointer;
+    }
+
+    .note {
+      color: #9ca3af;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>MU Online — Canvas Monitor</h1>
+
+  <div class="status" id="state">Conectando...</div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Canvas detectados</div>
+      <div class="value" id="canvas">--</div>
+    </div>
+    <div class="card">
+      <div class="label">Dibujos por segundo</div>
+      <div class="value" id="draws">--</div>
+    </div>
+    <div class="card">
+      <div class="label">Recursos observados</div>
+      <div class="value" id="resources">--</div>
+    </div>
+    <div class="card">
+      <div class="label">Segundos sin nuevos recursos</div>
+      <div class="value" id="quiet">--</div>
+    </div>
+  </div>
+
+  <h2>Detalles</h2>
+  <pre id="details">Esperando datos...</pre>
+
+  <h2>Historial de cambios</h2>
+  <button id="clear">Limpiar historial</button>
+  <button id="refresh">Actualizar ahora</button>
+  <pre id="log"></pre>
+
+  <p class="note">
+    POSSIBLY_READY es una estimación técnica; no garantiza que el
+    personaje esté listo para jugar.
+  </p>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

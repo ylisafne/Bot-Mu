@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MU Canvas Monitor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 350px;
+      margin: 0;
+      padding: 16px;
+      background: #111827;
+      color: #e5e7eb;
+    }
+
+    h2 { margin-top: 0; font-size: 18px; }
+
+    .state {
+      padding: 12px;
+      border-radius: 8px;
+      background: #1f2937;
+      font-size: 17px;
+      font-weight: bold;
+      overflow-wrap: anywhere;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      background: #1f2937;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .label {
+      color: #9ca3af;
+      font-size: 11px;
+    }
+
+    .value {
+      margin-top: 5px;
+      font-size: 16px;
+    }
+
+    h3 { font-size: 13px; }
+
+    #events {
+      font-size: 11px;
+      max-height: 180px;
+      overflow: auto;
+      padding-left: 18px;
+    }
+
+    #events li { margin-bottom: 7px; }
+
+    button {
+      width: 100%;
+      padding: 9px;
+      margin-top: 12px;
+      cursor: pointer;
+    }
+
+    .hint {
+      color: #9ca3af;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h2>MU Canvas Monitor</h2>
+
+  <div class="state" id="state">Conectando...</div>
+
+  <div class="grid">
+    <div class="metric">
+      <div class="label">Canvas</div>
+      <div class="value" id="canvas">--</div>
+    </div>
+    <div class="metric">
+      <div class="label">Dibujos / segundo</div>
+      <div class="value" id="draws">--</div>
+    </div>
+    <div class="metric">
+      <div class="label">Recursos observados</div>
+      <div class="value" id="resources">--</div>
+    </div>
+    <div class="metric">
+      <div class="label">Sin nuevos recursos</div>
+      <div class="value" id="quiet">--</div>
+    </div>
+  </div>
+
+  <h3>Detalles del canvas</h3>
+  <div id="details" class="hint">Esperando datos...</div>
+
+  <h3>Historial de eventos</h3>
+  <ul id="events"></ul>
+
+  <button id="refresh">Actualizar</button>
+
+  <p class="hint">
+    POSSIBLY_READY es una estimación técnica, no una garantía de que
+    el personaje esté listo para jugar.
+  </p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
