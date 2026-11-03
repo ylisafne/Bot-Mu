@@ -29,6 +29,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="recursos\MuIco.ico" />
     <None Remove="recursos\PjReference.png" />
     <None Remove="recursos\TradeReference.png" />
     <None Remove="tessdata\eng.traineddata" />
@@ -66,6 +67,10 @@
   <ItemGroup>
     <Folder Include="Properties\" />
     <Folder Include="tessdata\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="recursos\MuIco.ico" />
   </ItemGroup>
   
   <Target Name="ObfuscateBeforeSingleFileBundle" BeforeTargets="GenerateSingleFileBundle" DependsOnTargets="PrepareForBundle" Condition="'$(PublishSingleFile)' == 'true' and '$(Configuration)' == 'Release'">

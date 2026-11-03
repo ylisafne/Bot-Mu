@@ -48,6 +48,7 @@ namespace Kapi_Mu_Utility
         private const int WMSZ_RIGHT = 2;
         private const int WMSZ_TOP = 3;
         private const int WMSZ_BOTTOM = 6;
+        private TaskCompletionSource<bool>? _muInitializedTcs;
         private readonly HashSet<string> retentionProcesadas = new();
 
         // Estructura para capturar los límites del formulario
@@ -75,7 +76,16 @@ namespace Kapi_Mu_Utility
 
         private volatile bool esperaReconexion = false;
         private static readonly object _lockConsoleLog = new();
-        private Icon FrmIcon;
+        //Variables Para Color
+        [DllImport("User32.dll", CharSet = CharSet.Auto)]
+        public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+        [DllImport("User32.dll")]
+        private static extern IntPtr GetWindowDC(IntPtr hWnd);
+
+
+
+        private Icon? FrmIcon = null;
         //
         #endregion
 
@@ -119,20 +129,17 @@ namespace Kapi_Mu_Utility
         #region 3. Eventos del formulario
         private async void FrmWeb_Load(object sender, EventArgs e)
         {
+            var formHeaderBackgroundColor = Color.FromArgb(32, 32, 32);
+            var formHeaderTextColor = Color.FromArgb(255, 255, 255);
+
+            var formHeaderBackgroundColorValue = (formHeaderBackgroundColor.B << 16) | (formHeaderBackgroundColor.G << 8) | formHeaderBackgroundColor.R;
+            var formHeaderTextColorValue = (formHeaderTextColor.B << 16) | (formHeaderTextColor.G << 8) | formHeaderTextColor.R;
+            DwmSetWindowAttribute(this.Handle, 35, ref formHeaderBackgroundColorValue, System.Runtime.InteropServices.Marshal.SizeOf(formHeaderBackgroundColorValue));
+            DwmSetWindowAttribute(this.Handle, 36, ref formHeaderTextColorValue, System.Runtime.InteropServices.Marshal.SizeOf(formHeaderTextColorValue));
+            
+            
             await CargarWebMainAsync();
 
-        }
-        private async Task ProbarReconectar()
-        {
-            try
-            {
-                await EsperarCargaJuegoAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"{vvPerfil} Error en prueba de reconexión: {ex}");
-            }
         }
         private void FrmWeb_KeyDown(object sender, KeyEventArgs e)
         {
@@ -218,6 +225,7 @@ namespace Kapi_Mu_Utility
                 webMain.CoreWebView2.NavigationCompleted += async (sender, e) =>
                 {
                     if (e.IsSuccess) {
+                        await InstallAutoHelper();
                         await InstallAutoSessionReload();
                         await InstallRareAutoClaim();
                         await InstallAutoErrorReload();
@@ -268,8 +276,7 @@ namespace Kapi_Mu_Utility
                                             !button.disabled &&
                                             button.isConnected
                                         ) {
-                                            window.chrome.webview.postMessage('SESSION_RECONNECT_CLICK'
-                                                                            );
+                                            window.chrome.webview.postMessage('SESSION_RECONNECT_CLICK');
                                             button.dataset.autoClicked = '1';
                                             button.click();
                                         }
@@ -286,9 +293,184 @@ namespace Kapi_Mu_Utility
                         attributeFilter: ['class', 'style', 'disabled']
                     });
                     checkModal();
-                })();
-                ";
+                })();";
 
+            await webMain.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        private async Task InstallAutoHelper()
+        {
+            string script = @"
+            (function () {
+                if (window.__autoHelperMode) return;
+                window.__autoHelperMode = true;
+
+                let timer = null;
+                let confirmTimer = null;
+                let attempts = 0;
+                let confirming = false;
+                let finished = false;
+
+                const MAX_ATTEMPTS = 5;
+
+                function visible(el) {
+                    if (!el || !el.isConnected) return false;
+                    const s = getComputedStyle(el);
+                    const r = el.getBoundingClientRect();
+                    return s.display !== 'none' &&
+                           s.visibility !== 'hidden' &&
+                           Number(s.opacity) > 0 &&
+                           r.width > 0 && r.height > 0 &&
+                           r.bottom > 0 && r.right > 0 &&
+                           r.top < innerHeight && r.left < innerWidth;
+                }
+
+                function mode() {
+                    return document.getElementById('mu-mobile-helper-auto')
+                        ?.querySelector('span')?.textContent.trim().toUpperCase();
+                }
+
+                function send(message) {
+                    try { window.chrome.webview.postMessage(message); } catch (e) {}
+                }
+
+                function success() {
+                    if (finished) return;
+                    finished = true;
+                    clearTimeout(timer);
+                    clearInterval(confirmTimer);
+                    send('MU_INITIALIZED');
+                }
+
+                function error() {
+                    if (finished) return;
+                    finished = true;
+                    clearTimeout(timer);
+                    clearInterval(confirmTimer);
+                    send('MU_ERROR');
+                }
+
+                function retry() {
+                    confirming = false;
+                    if (attempts >= MAX_ATTEMPTS) {
+                        error();
+                        return;
+                    }
+                    if (!timer) timer = setTimeout(() => {
+                        timer = null;
+                        activate();
+                    }, 5000);
+                }
+
+                function activate() {
+                    if (finished || confirming) return;
+
+                    if (!visible(document.getElementById('mu-web-autoatk-btn')))
+                        return;
+
+                    if (mode() === 'AUTO') {
+                        success();
+                        return;
+                    }
+
+                    if (attempts >= MAX_ATTEMPTS) {
+                        error();
+                        return;
+                    }
+
+                    attempts++;
+
+                    const button = document.getElementById('mu-mobile-helper-auto');
+
+                    if (!button || mode() !== 'MANUAL') {
+                        retry();
+                        return;
+                    }
+
+                    confirming = true;
+                    button.click();
+
+                    const start = Date.now();
+
+                    confirmTimer = setInterval(() => {
+                        if (mode() === 'AUTO') {
+                            clearInterval(confirmTimer);
+                            confirmTimer = null;
+                            success();
+                            return;
+                        }
+
+                        const yes = document.querySelector('[data-confirm=""yes""]');
+
+                        if (yes) {
+                            clearInterval(confirmTimer);
+                            confirmTimer = null;
+
+                            yes.dispatchEvent(new PointerEvent('pointerdown', {
+                                bubbles: true,
+                                cancelable: true,
+                                pointerType: 'mouse',
+                                button: 0,
+                                buttons: 1
+                            }));
+
+                            setTimeout(() => {
+                                if (mode() === 'AUTO') success();
+                                else retry();
+                            }, 500);
+
+                            return;
+                        }
+
+                        if (Date.now() - start > 5000) {
+                            clearInterval(confirmTimer);
+                            confirmTimer = null;
+                            retry();
+                        }
+                    }, 100);
+                }
+
+                function check() {
+                    if (finished) return;
+
+                    const gameButton = document.getElementById('mu-web-autoatk-btn');
+
+                    if (!visible(gameButton)) {
+                        clearTimeout(timer);
+                        timer = null;
+                        clearInterval(confirmTimer);
+                        confirmTimer = null;
+                        confirming = false;
+                        attempts = 0;
+                        return;
+                    }
+
+                    if (mode() === 'AUTO') {
+                        success();
+                        return;
+                    }
+
+                    if (!timer && !confirming && attempts === 0) {
+                        timer = setTimeout(() => {
+                            timer = null;
+                            activate();
+                        }, 5000);
+                    }
+                }
+
+                const observer = new MutationObserver(check);
+                observer.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true,
+                    attributes: true,
+                    attributeFilter: ['style', 'class', 'hidden', 'disabled', 'aria-pressed']
+                });
+
+                window.addEventListener('resize', check);
+                window.addEventListener('scroll', check, true);
+
+                check();
+            })();";
             await webMain.CoreWebView2.ExecuteScriptAsync(script);
         }
         private async Task InstallRareAutoClaim()
@@ -355,8 +537,26 @@ namespace Kapi_Mu_Utility
 
             await webMain.CoreWebView2.ExecuteScriptAsync(script);
         }
+        private async Task<bool> EsperarMuInicializadoAsync(CancellationToken token)
+        {
+            _muInitializedTcs = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+
+            try
+            {
+                return await _muInitializedTcs.Task.WaitAsync(token);
+            }
+            finally
+            {
+                _muInitializedTcs = null;
+            }
+        }
         private async Task ReiniciarWebMainAsync()
         {
+            _muInitializedTcs = new TaskCompletionSource<bool>(
+                                    TaskCreationOptions.RunContinuationsAsynchronously
+                                );
             // Cerrar la navegación actual
             webMain.CoreWebView2?.Stop();
 
@@ -479,6 +679,13 @@ namespace Kapi_Mu_Utility
 
             switch (mensaje)
             {
+                case "MU_INITIALIZED":
+                    _muInitializedTcs?.TrySetResult(true);
+                    break;
+                case "MU_ERROR":
+                    ReiniciarWebMainAsync();
+                    ReconexionEvent(new Point(10, 10));
+                    break;
                 case "MU_ERROR_RELOAD_AVAILABLE":
                     ReiniciarWebMainAsync();
                     ReconexionEvent(new Point(10, 10));
@@ -578,6 +785,7 @@ namespace Kapi_Mu_Utility
             LimpiarColaAccionesOCR();
             
             clicksActivos = true;
+            CambiarIcono();
             BloquearRedimensionamiento(true);
             
             ActualizarEstadoVisual();
@@ -760,9 +968,6 @@ namespace Kapi_Mu_Utility
                 string script = $@"
             (async () => {{
                 try {{
-                    console.log('FETCH ORIGIN:', window.location.origin);
-                    console.log('FETCH URL:', window.location.href);
-
                     const response = await fetch(
                         {urlJS},
                         {{
@@ -850,7 +1055,7 @@ namespace Kapi_Mu_Utility
         private void DetenerClicks()
         {
             clicksActivos = false;
-
+            CambiarIcono();
             //Detener OCR
             ctsOCR?.Cancel();
             ctsOCR?.Dispose();
@@ -1381,11 +1586,8 @@ namespace Kapi_Mu_Utility
 
                 try
                 {
-                    var tareaConsola = EsperarMensajeConsolaAsync(
-                        "join map server received",
-                        ctsEventos.Token
-                    );
-
+                    var tareaInicializacion = EsperarMuInicializadoAsync(ctsEventos.Token);
+                    
                     var tareaImagen = BuscaPantallaSeleccion(
                         ctsEventos.Token
                     );
@@ -1396,7 +1598,7 @@ namespace Kapi_Mu_Utility
                     );
 
                     var completada = await Task.WhenAny(
-                        tareaConsola,
+                        tareaInicializacion,
                         tareaImagen,
                         tareaTimeout
                     );
@@ -1410,7 +1612,7 @@ namespace Kapi_Mu_Utility
 
                         try
                         {
-                            await Task.WhenAll(tareaConsola, tareaImagen);
+                            await Task.WhenAll(tareaInicializacion, tareaImagen);
                         }
                         catch (OperationCanceledException) { }
 
@@ -1427,14 +1629,14 @@ namespace Kapi_Mu_Utility
 
                     try
                     {
-                        await Task.WhenAll(tareaConsola, tareaImagen);
+                        await Task.WhenAll(tareaInicializacion, tareaImagen);
                     }
                     catch (OperationCanceledException) { }
 
                     // EVENTO DE CONSOLA
-                    if (completada == tareaConsola)
+                    if (completada == tareaInicializacion)
                     {
-                        await tareaConsola;
+                        await tareaInicializacion;
 
                         System.Diagnostics.Debug.WriteLine(
                             $"{vvPerfil} Mensaje de consola recibido."
@@ -1853,11 +2055,12 @@ namespace Kapi_Mu_Utility
 
         private void CambiarIcono()
         {
-            // Cambiar el icono del formulario principal
-            Icon icono = this.Icon;
-
-
-
+            if (FrmIcon != null)
+                FrmIcon = this.Icon;
+            if (clicksActivos)
+                this.Icon = System.Drawing.SystemIcons.Warning;
+            else
+                this.Icon = FrmIcon;
         }
         private void LimpiarColaAccionesOCR()
         {
@@ -2041,6 +2244,7 @@ namespace Kapi_Mu_Utility
         }
         protected override void WndProc(ref Message m)
         {
+            
             if (m.Msg == WM_SIZING)
             {
                 RECT rc = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
