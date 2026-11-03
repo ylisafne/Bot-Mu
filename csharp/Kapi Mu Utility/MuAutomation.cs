@@ -9,7 +9,13 @@ namespace Kapi_Mu_Utility;
 public sealed class MuAutomation : IAsyncDisposable
 {
     private const int ClienteDebugPort = 9223;
-    private const string ClienteExe = @"C:\Users\ylisa\AppData\Local\Programs\MU Magdalenas\MU Magdalenas.exe";
+    private static readonly string ClienteExe =
+    Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Programs",
+        "MU Magdalenas",
+        "MU Magdalenas.exe"
+    );
     private const int SleepMs = 60;
 
     private readonly HttpClient _httpClient = new();
