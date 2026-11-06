@@ -1,12 +1,18 @@
 ﻿namespace Kapi_Mu_Utility
 {
+    public class LogJson { 
+        public string name { get; set; }
+        public DateTime lastConnect { get; set; }
+        public string mode { get; set; }
+        public bool skill { get; set; }
+    }
     public enum ActionType
     {
         Error = 0,
         Trade = 1,
-        Reconexion = 2
+        Reconexion = 2,
+        SelecionPj = 3
     }
-
     public class HelperResponse
     {
         public ActionType IdAction { get; set; }

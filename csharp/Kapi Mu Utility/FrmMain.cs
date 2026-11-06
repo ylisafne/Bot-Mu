@@ -3,6 +3,7 @@ using System.Data;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 namespace Kapi_Mu_Utility
 {
@@ -46,6 +47,11 @@ namespace Kapi_Mu_Utility
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private OCRService servicioOCR;
+        //Color
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+
         //
 
         public FrmMain()
@@ -60,6 +66,13 @@ namespace Kapi_Mu_Utility
         // ==================== EVENTOS DEL FORMULARIO ====================
         private void FrmMain_Load(object sender, EventArgs e)
         {
+            var formHeaderBackgroundColor = Color.FromArgb(150, 150, 150);
+            var formHeaderTextColor = Color.FromArgb(255, 255, 255);
+
+            var formHeaderBackgroundColorValue = (formHeaderBackgroundColor.B << 16) | (formHeaderBackgroundColor.G << 8) | formHeaderBackgroundColor.R;
+            var formHeaderTextColorValue = (formHeaderTextColor.B << 16) | (formHeaderTextColor.G << 8) | formHeaderTextColor.R;
+            DwmSetWindowAttribute(this.Handle, 35, ref formHeaderBackgroundColorValue, System.Runtime.InteropServices.Marshal.SizeOf(formHeaderBackgroundColorValue));
+            DwmSetWindowAttribute(this.Handle, 36, ref formHeaderTextColorValue, System.Runtime.InteropServices.Marshal.SizeOf(formHeaderTextColorValue));
             if (!PassKey)
             {
                 EvalForm evalForm = new EvalForm();
