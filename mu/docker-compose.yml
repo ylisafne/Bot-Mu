@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mu-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mu:
+    build:
+      context: ./OpenMU
+    container_name: mu-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mu-network
+    ports:
+      - "44405:44405/tcp"
+      - "44406:44406/tcp"
+      - "45901-45906:45901-45906/tcp"
+      - "45980:45980/tcp"
+    environment:
+      TZ: ${TZ}
+
+volumes:
+  postgres_data:
+
+networks:
+  mu-network:
+    driver: bridge
